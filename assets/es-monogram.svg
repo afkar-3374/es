@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="650 195 750 335" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <filter id="removeBlack" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  .8 .8 .8 0 -.08"/>
+    </filter>
+  </defs>
+  <image href="es-logo.png" width="2048" height="1152" filter="url(#removeBlack)"/>
+</svg>
