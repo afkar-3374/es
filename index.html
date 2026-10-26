@@ -156,6 +156,10 @@
         <button type="button" data-sound aria-label="Page sound">🔊</button>
       </nav>
     </div>
+    <script>
+      // Opened from the library inside the 3D building: no need for the "walk in" button
+      if (window.top !== window) document.querySelectorAll('a[href="world/"]').forEach((a) => a.remove());
+    </script>
     <script src="book.js"></script>
   </body>
 </html>
