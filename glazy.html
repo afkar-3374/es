@@ -3,47 +3,63 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#07070A" />
+    <meta name="theme-color" content="#FFF8F2" />
     <meta name="description" content="Glazy by Electrosparkzz: a private, end-to-end encrypted little world for couples. Chat, calls, love taps, games and a garden you grow together." />
     <meta property="og:title" content="Glazy — a private little world for two" />
     <meta property="og:description" content="End-to-end encrypted chat, calls, games and a garden, made only for couples." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://electrosparkzz.in/glazy.html" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://electrosparkzz.in/assets/og-glazy.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <link rel="canonical" href="https://electrosparkzz.in/glazy.html" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://electrosparkzz.in/assets/og-glazy.png" />
     <title>Glazy — a private little world for two · Electrosparkzz</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="site-shell gz" id="top">
-      <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
-      <div class="cursor-light" aria-hidden="true"></div>
-      <div class="grid" aria-hidden="true"></div><div class="grain" aria-hidden="true"></div>
+    <div class="page" id="top">
+      <div class="blobs" aria-hidden="true"><span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span></div>
 
-      <nav class="nav glass-nav" aria-label="Primary navigation">
-        <a class="brand-lockup" href="index.html" aria-label="Electrosparkzz home"><span class="mini-mark">ES</span><span>ELECTROSPARKZZ</span></a>
-        <div class="nav-links"><a href="#what">What</a><i></i><a href="#how">How</a><i></i><a href="#privacy">Privacy</a><i></i><a href="#faq">FAQ</a></div>
-      </nav>
-
-      <header class="gz-hero">
-        <p class="eyebrow reveal copy-reveal">AN ELECTROSPARKZZ PRODUCT</p>
-        <div class="gz-mark reveal logo-reveal" aria-hidden="true">
-          <img src="assets/glazy-icon.svg" alt="" width="88" height="88" />
-        </div>
-        <h1 class="gz-title reveal headline-reveal">GLAZY</h1>
-        <p class="intro reveal intro-reveal">A private little world for two. Chat, call, play and grow a garden together, in a space that only the two of you can read.</p>
-        <div class="gz-actions reveal status-reveal">
-          <span class="status">COMING SOON <b></b></span>
-          <a class="gz-button" href="https://glazy.electrosparkzz.in" rel="noopener">Try the early preview →</a>
-        </div>
+      <header class="topbar">
+        <nav class="nav" aria-label="Main">
+          <a class="brand" href="index.html" aria-label="Electrosparkzz home">
+            <img src="assets/favicon.svg" alt="" width="30" height="30" />
+            <span>electrosparkzz</span>
+          </a>
+          <div class="nav-links">
+            <a href="#how">How</a>
+            <a href="#privacy">Privacy</a>
+            <a class="nav-pill" href="https://glazy.electrosparkzz.in" rel="noopener">Open</a>
+          </div>
+        </nav>
       </header>
 
+      <main>
+      <section class="gz-hero">
+        <div class="stickers" aria-hidden="true">
+          <span class="sticker s1">♥</span><span class="sticker s2">✦</span><span class="sticker s3">★</span><span class="sticker s4">✿</span>
+        </div>
+        <p class="eyebrow reveal">💗 An Electrosparkzz product</p>
+        <div class="gz-mark reveal" aria-hidden="true">
+          <img src="assets/glazy-icon.svg" alt="" width="88" height="88" />
+        </div>
+        <h1 class="gz-title reveal"><span class="grad">Glazy</span></h1>
+        <p class="lead reveal">A private little world for two. Chat, call, play and grow a garden together, in a space that only the two of you can read.</p>
+        <div class="gz-actions reveal">
+          <span class="status"><b></b> Coming soon</span>
+          <a class="btn" href="https://glazy.electrosparkzz.in" rel="noopener">Try the early preview →</a>
+        </div>
+      </section>
+
       <section class="gz-section" id="what" aria-labelledby="what-title">
-        <p class="eyebrow">THE PURPOSE</p>
-        <h2 id="what-title">Made for couples, <em>and only couples.</em></h2>
+        <p class="kicker">The purpose</p>
+        <h2 id="what-title">Made for couples, <span class="grad">and only couples.</span></h2>
         <p class="gz-lead">Most apps mix your relationship in with everyone else. Glazy is one shared space for exactly two people. Nobody else can join it, see it, or read it. That includes us.</p>
         <div class="gz-cards">
           <article class="gz-card"><span>💬</span><h3>Chat</h3><p>Messages, photos, videos, voice notes and files, with replies, reactions, pins and read receipts.</p></article>
@@ -56,8 +72,8 @@
       </section>
 
       <section class="gz-section" id="how" aria-labelledby="how-title">
-        <p class="eyebrow">HOW TO USE IT</p>
-        <h2 id="how-title">Set up together, <em>in a minute.</em></h2>
+        <p class="kicker">How to use it</p>
+        <h2 id="how-title">Set up together, <span class="grad">in a minute.</span></h2>
         <ol class="gz-steps">
           <li><b>Open Glazy on your phone</b><span>Go to <a href="https://glazy.electrosparkzz.in">glazy.electrosparkzz.in</a>. Install it so it behaves like a normal app. On Android, tap <i>Install</i> (or ⋮ → <i>Add to Home screen</i>). On iPhone, tap <i>Share → Add to Home Screen</i>. On your home screen it shows up as <b>Kitty Timer</b> with a stopwatch icon.</span></li>
           <li><b>Tap the kitty 5 times</b><span>Glazy opens as a Kitty Timer. Tap the kitty <b>five times quickly</b> to create your couple space.</span></li>
@@ -70,8 +86,8 @@
       </section>
 
       <section class="gz-section" id="privacy" aria-labelledby="privacy-title">
-        <p class="eyebrow">PRIVACY &amp; ENCRYPTION</p>
-        <h2 id="privacy-title">End-to-end encrypted, <em>for real.</em></h2>
+        <p class="kicker">Privacy &amp; encryption</p>
+        <h2 id="privacy-title">End-to-end encrypted, <span class="grad">for real.</span></h2>
         <p class="gz-lead">Your messages are locked on your phone before they are sent, and only your partner’s phone can unlock them. Our servers store scrambled data they cannot read.</p>
 
         <div class="gz-grid2">
@@ -115,8 +131,8 @@
       </section>
 
       <section class="gz-section" id="faq" aria-labelledby="faq-title">
-        <p class="eyebrow">QUESTIONS</p>
-        <h2 id="faq-title">Good to <em>know.</em></h2>
+        <p class="kicker">Questions</p>
+        <h2 id="faq-title">Good to <span class="grad">know.</span></h2>
         <div class="gz-faq">
           <details><summary>Can Electrosparkzz read our chats?</summary><p>No. Chats, photos and voice notes are encrypted on your phones with a key we never have. We only store scrambled data.</p></details>
           <details><summary>Can someone else join our space?</summary><p>No. A space is created for exactly two people at once, and nobody can be added afterwards.</p></details>
@@ -128,12 +144,16 @@
       </section>
 
       <section class="gz-cta">
-        <h2>Your space is <em>waiting.</em></h2>
-        <a class="gz-button" href="https://glazy.electrosparkzz.in" rel="noopener">Open glazy.electrosparkzz.in →</a>
+        <h2>Your space is <span class="grad">waiting.</span></h2>
+        <a class="btn" href="https://glazy.electrosparkzz.in" rel="noopener">Open glazy.electrosparkzz.in →</a>
       </section>
+      </main>
 
-      <footer><span>© 2026 ELECTROSPARKZZ</span><a href="index.html">ELECTROSPARKZZ.IN</a></footer>
-    </main>
-    <script src="script.js"></script>
+      <footer class="footer">
+        <span>© 2026 Electrosparkzz</span>
+        <span>made with 💖</span>
+        <a href="index.html">← electrosparkzz.in</a>
+      </footer>
+    </div>
   </body>
 </html>
