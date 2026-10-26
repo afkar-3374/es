@@ -7,6 +7,7 @@ import { canvasTexture, glassMaterial, usePBR } from './materials';
 import { ui, type Book, type Interactable } from './interact';
 import { BUILDING, world } from './state';
 import { STAIRWELL } from './Building';
+import { seatInteract } from './seats';
 
 const FONT = `${import.meta.env.BASE_URL}fonts/Poppins-SemiBold.ttf`;
 const FLOOR = 4.8;
@@ -32,6 +33,7 @@ export function Library() {
       {CUPBOARD_Z.flatMap((z) =>
         [-1, 1].map((side) => {
           const featured = side === FEATURED.side && z === FEATURED.z;
+          if (side === -1 && z > -4) return null; // the café counter stands here
           return <Cupboard key={`${side}${z}`} side={side as -1 | 1} z={z} featured={featured} seed={Math.round(z * 10) * side} />;
         })
       )}
@@ -106,14 +108,14 @@ function Room() {
         <planeGeometry args={[INNER.x1 - INNER.x0, H]} />
       </mesh>
       {/* front: wall below and above the window band (the street shows through the glass) */}
-      <mesh position={[0, FLOOR + 0.7, INNER.z1 - 0.06]} rotation-y={Math.PI} material={paint}>
-        <planeGeometry args={[INNER.x1 - INNER.x0, 1.4]} />
+      <mesh position={[0, FLOOR + 0.25, INNER.z1 - 0.06]} rotation-y={Math.PI} material={paint}>
+        <planeGeometry args={[INNER.x1 - INNER.x0, 0.5]} />
       </mesh>
       <mesh position={[0, (8.4 + CEIL) / 2, INNER.z1 - 0.06]} rotation-y={Math.PI} material={paint}>
         <planeGeometry args={[INNER.x1 - INNER.x0, CEIL - 8.4]} />
       </mesh>
-      {/* a wide window sill to lean on */}
-      <mesh position={[0, 6.2, INNER.z1 - 0.2]} castShadow receiveShadow material={skirting}>
+      {/* a low wooden window ledge */}
+      <mesh position={[0, FLOOR + 0.52, INNER.z1 - 0.2]} castShadow receiveShadow material={skirting}>
         <boxGeometry args={[INNER.x1 - INNER.x0, 0.05, 0.32]} />
       </mesh>
 
@@ -361,19 +363,27 @@ function coverTexture(book: Book) {
   });
 }
 
+/** A book's materials: box faces +x, −x, +y, −y, +z (front cover), −z (back). */
+const coverCache = new Map<string, THREE.Material[]>();
+export function coverMaterials(book: Book): THREE.Material[] {
+  let mats = coverCache.get(book.id);
+  if (!mats) {
+    const cover = new THREE.MeshStandardMaterial({ map: coverTexture(book), roughness: 0.45 });
+    const paper = new THREE.MeshStandardMaterial({ color: '#f5efe2', roughness: 0.9 });
+    const spine = new THREE.MeshStandardMaterial({ color: book.colors[1], roughness: 0.5 });
+    mats = [paper, spine, paper, paper, cover, spine];
+    coverCache.set(book.id, mats);
+  }
+  return mats;
+}
+
 const BOOK_W = 0.24;
 const BOOK_H = 0.34;
 const BOOK_D = 0.04;
 
 function ShelfBook({ book, slot }: { book: Book; slot: number }) {
   const group = useRef<THREE.Group>(null);
-  const mats = useMemo(() => {
-    const cover = new THREE.MeshStandardMaterial({ map: coverTexture(book), roughness: 0.45 });
-    const paper = new THREE.MeshStandardMaterial({ color: '#f5efe2', roughness: 0.9 });
-    const spine = new THREE.MeshStandardMaterial({ color: book.colors[1], roughness: 0.5 });
-    // box faces: +x, -x, +y, -y, +z (front cover), -z (back)
-    return [paper, spine, paper, paper, cover, spine];
-  }, [book]);
+  const mats = useMemo(() => coverMaterials(book), [book]);
 
   // where it stands on the shelf (cupboard space)
   const home = useMemo(() => {
@@ -392,7 +402,8 @@ function ShelfBook({ book, slot }: { book: Book; slot: number }) {
     const g = group.current;
     if (!g || !g.parent) return;
     const state = ui.get();
-    const mine = state.book?.id === book.id;
+    g.visible = state.carrying?.id !== book.id;
+    const mine = state.book?.id === book.id && state.carrying?.id !== book.id;
     lift.current += ((mine ? 1 : 0) - lift.current) * Math.min(dt * 3.2, 1);
     if (mine && lift.current > 0.93 && !opened.current) {
       opened.current = true;
@@ -421,7 +432,9 @@ function ShelfBook({ book, slot }: { book: Book; slot: number }) {
       label: `Read “${book.title}”`,
       reach: 3.2,
       onUse: () => {
-        if (!ui.get().book) ui.takeBook(book);
+        const s = ui.get();
+        if (!s.book && !s.carrying) ui.takeBook(book);
+        else if (s.carrying) ui.toast('You’re already carrying a book. Put it back first.');
       },
     }),
     [book]
@@ -471,9 +484,21 @@ function ReadingTable() {
           </mesh>
         </group>
       ))}
-      {/* chairs */}
+      {/* chairs (click one to sit at the table) */}
       {[[-0.7, -0.85, 0], [0.7, -0.85, 0], [-0.7, 0.85, Math.PI], [0.7, 0.85, Math.PI]].map(([cx, cz, r]) => (
-        <group key={`${cx}${cz}`} position={[cx, 0, cz]} rotation-y={r}>
+        <group
+          key={`${cx}${cz}`}
+          position={[cx, 0, cz]}
+          rotation-y={r}
+          userData={{
+            interact: seatInteract(
+              'Sit at the reading table',
+              new THREE.Vector3(cx, FLOOR + 0.5, z + cz),
+              r === 0 ? Math.PI : 0,
+              new THREE.Vector3(cx, FLOOR, z + cz * 1.9)
+            ),
+          }}
+        >
           <mesh position={[0, 0.46, 0]} castShadow material={cushion}>
             <boxGeometry args={[0.46, 0.08, 0.44]} />
           </mesh>

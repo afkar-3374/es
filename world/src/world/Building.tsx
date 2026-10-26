@@ -167,38 +167,35 @@ export function Building() {
       ))}
 
       {/* sign band with the name */}
-      <mesh position={[0, 5.25, front + 0.05]} castShadow material={acp}>
-        <boxGeometry args={[W + 0.2, 1.35, 0.2]} />
+      <mesh position={[0, 4.9, front + 0.05]} castShadow material={acp}>
+        <boxGeometry args={[W + 0.2, 0.8, 0.2]} />
       </mesh>
-      <group position={[0, 5.22, front + 0.17]}>
-        <Text font={FONT} fontSize={0.78} letterSpacing={0.14} anchorX="right" anchorY="middle" position={[0.15, 0, 0]} material={signWhite}>
+      <group position={[0, 4.88, front + 0.17]}>
+        <Text font={FONT} fontSize={0.52} letterSpacing={0.14} anchorX="right" anchorY="middle" position={[0.15, 0, 0]} material={signWhite}>
           ELECTRO
         </Text>
-        <Text font={FONT} fontSize={0.78} letterSpacing={0.14} anchorX="left" anchorY="middle" position={[0.25, 0, 0]} material={signPink}>
+        <Text font={FONT} fontSize={0.52} letterSpacing={0.14} anchorX="left" anchorY="middle" position={[0.25, 0, 0]} material={signPink}>
           SPARKZZ
         </Text>
       </group>
       {/* lights the sign from just below the library floor, so it can't leak onto the floor inside */}
       <pointLight ref={signLight} position={[0, 4.3, front + 1.7]} color="#ff7ab0" distance={6} decay={2} intensity={0} />
 
-      {/* first floor: plaster with a long window band (the library) */}
-      <mesh position={[0, 6.0, front - 0.15]} castShadow receiveShadow material={plaster}>
-        <boxGeometry args={[W, 0.4, 0.3]} />
-      </mesh>
+      {/* first floor: a tall window band (the library), almost down to its floor */}
       <mesh position={[0, 8.7, front - 0.15]} castShadow receiveShadow material={plaster}>
         <boxGeometry args={[W, 0.6, 0.3]} />
       </mesh>
       {[-sideX + 0.4, sideX - 0.4].map((x) => (
-        <mesh key={x} position={[x, 7.3, front - 0.15]} castShadow material={plaster}>
-          <boxGeometry args={[0.8, 2.6, 0.3]} />
+        <mesh key={x} position={[x, 6.85, front - 0.15]} castShadow material={plaster}>
+          <boxGeometry args={[0.8, 3.1, 0.3]} />
         </mesh>
       ))}
-      <mesh position={[0, 7.3, front - 0.32]} material={glass}>
-        <boxGeometry args={[W - 1.6, 2.2, 0.03]} />
+      <mesh position={[0, 6.85, front - 0.32]} material={glass}>
+        <boxGeometry args={[W - 1.6, 3.1, 0.03]} />
       </mesh>
       {Array.from({ length: 11 }, (_, i) => (
-        <mesh key={i} position={[-sideX + 0.8 + ((W - 1.6) / 10) * i, 7.3, front - 0.3]} castShadow material={aluminium}>
-          <boxGeometry args={[0.07, 2.2, 0.1]} />
+        <mesh key={i} position={[-sideX + 0.8 + ((W - 1.6) / 10) * i, 6.85, front - 0.3]} castShadow material={aluminium}>
+          <boxGeometry args={[0.07, 3.1, 0.1]} />
         </mesh>
       ))}
       {/* concrete sunshade over the window band */}

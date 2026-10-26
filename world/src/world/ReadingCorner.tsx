@@ -4,7 +4,9 @@ import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import { CuboidCollider, CylinderCollider, RigidBody } from '@react-three/rapier';
 import { canvasTexture, usePBR } from './materials';
-import { ui, type Interactable } from './interact';
+import { ui, useUi, type Interactable } from './interact';
+import { Cup, DRINKS } from './Cups';
+import { seatInteract } from './seats';
 import { world } from './state';
 
 /*
@@ -13,9 +15,9 @@ import { world } from './state';
  * and rain running down the glass when it rains in Kasaragod.
  */
 const ROOM_FLOOR = 4.8;
-const DECK = 0.4; // the corner sits on a raised platform so you can see the street sitting down
+const DECK = 0.2; // a low raised nook by the floor-to-ceiling window
 const FLOOR = ROOM_FLOOR + DECK;
-const CHAIR = new THREE.Vector3(7.6, FLOOR, -2.3);
+const CHAIR = new THREE.Vector3(7.6, FLOOR, -1.75);
 const PLATFORM = { x0: 4.4, x1: 10.6, z0: -4.2, z1: -0.75 };
 
 export function ReadingCorner() {
@@ -55,7 +57,7 @@ function Platform() {
       <mesh position={[PLATFORM.x0 - 0.01, ROOM_FLOOR + DECK - 0.02, cz]} material={trim}>
         <boxGeometry args={[0.04, 0.05, d]} />
       </mesh>
-      {/* one wide step up from the room (two 20 cm risers in all) */}
+      {/* one wide step up from the room */}
       <mesh position={[cx, ROOM_FLOOR + DECK / 4, PLATFORM.z0 - 0.18]} castShadow receiveShadow material={deck}>
         <boxGeometry args={[stepW, DECK / 2, 0.36]} />
       </mesh>
@@ -97,19 +99,9 @@ function CornerRug() {
 function Armchair() {
   const fabric = useMemo(() => new THREE.MeshStandardMaterial({ color: '#2f6f73', roughness: 0.95 }), []);
   const wood = usePBR('wood_floor', [0.3, 0.3], { tint: '#5a3a24' });
+  // sit facing the window (π = towards +z, the street)
   const sit: Interactable = useMemo(
-    () => ({
-      label: 'Sit in the armchair',
-      reach: 3.2,
-      onUse: () => {
-        world.seat = {
-          eye: new THREE.Vector3(CHAIR.x, FLOOR + 1.12, CHAIR.z - 0.05),
-          yaw: Math.PI, // facing the window
-          standAt: new THREE.Vector3(CHAIR.x - 0.9, FLOOR, CHAIR.z + 0.6),
-        };
-        ui.setSeated(true);
-      },
-    }),
+    () => seatInteract('Sit in the armchair', new THREE.Vector3(CHAIR.x, FLOOR + 0.45, CHAIR.z - 0.05), Math.PI, new THREE.Vector3(CHAIR.x - 0.9, FLOOR, CHAIR.z - 0.9), 0.67),
     []
   );
   return (
@@ -234,28 +226,6 @@ function SleepingCat() {
 /** A little side table with a steaming cup of tea and two books. */
 function SideTable() {
   const wood = usePBR('wood_floor', [0.4, 0.4], { tint: '#7a5236' });
-  const steamTex = useMemo(
-    () =>
-      canvasTexture(64, 64, (g) => {
-        const grad = g.createRadialGradient(32, 32, 0, 32, 32, 30);
-        grad.addColorStop(0, 'rgba(255,255,255,0.55)');
-        grad.addColorStop(1, 'rgba(255,255,255,0)');
-        g.fillStyle = grad;
-        g.fillRect(0, 0, 64, 64);
-      }),
-    []
-  );
-  const puffs = useRef<(THREE.Sprite | null)[]>([]);
-  useFrame(({ clock }) => {
-    const t = clock.elapsedTime;
-    puffs.current.forEach((s, i) => {
-      if (!s) return;
-      const k = (t * 0.35 + i / 4) % 1;
-      s.position.set(Math.sin(t * 1.3 + i * 2) * 0.02 * k, 0.07 + k * 0.28, 0);
-      s.scale.setScalar(0.05 + k * 0.12);
-      (s.material as THREE.SpriteMaterial).opacity = Math.sin(k * Math.PI) * 0.5;
-    });
-  });
   return (
     <group position={[8.75, FLOOR, -1.85]}>
       <mesh position={[0, 0.55, 0]} castShadow receiveShadow material={wood}>
@@ -267,30 +237,8 @@ function SideTable() {
       <mesh position={[0, 0.02, 0]} material={wood}>
         <cylinderGeometry args={[0.18, 0.2, 0.03, 20]} />
       </mesh>
-      {/* tea */}
-      <group position={[-0.08, 0.57, 0.08]}>
-        <mesh position={[0, 0.005, 0]}>
-          <cylinderGeometry args={[0.075, 0.07, 0.01, 24]} />
-          <meshStandardMaterial color="#f4f1ea" roughness={0.25} />
-        </mesh>
-        <mesh position={[0, 0.045, 0]} castShadow>
-          <cylinderGeometry args={[0.042, 0.034, 0.075, 24, 1, true]} />
-          <meshStandardMaterial color="#f4f1ea" roughness={0.25} side={THREE.DoubleSide} />
-        </mesh>
-        <mesh position={[0, 0.075, 0]} rotation-x={-Math.PI / 2}>
-          <circleGeometry args={[0.04, 20]} />
-          <meshStandardMaterial color="#8a4b1f" roughness={0.15} />
-        </mesh>
-        <mesh position={[0.05, 0.045, 0]} rotation-z={Math.PI / 2}>
-          <torusGeometry args={[0.02, 0.005, 6, 14]} />
-          <meshStandardMaterial color="#f4f1ea" roughness={0.25} />
-        </mesh>
-        {[0, 1, 2, 3].map((i) => (
-          <sprite key={i} ref={(s) => (puffs.current[i] = s)}>
-            <spriteMaterial map={steamTex} transparent depthWrite={false} opacity={0} />
-          </sprite>
-        ))}
-      </group>
+      {/* a glass of chai you can pick up and drink */}
+      <TableTea />
       {/* two books, one on the other */}
       <mesh position={[0.1, 0.59, -0.08]} rotation-y={0.3} castShadow>
         <boxGeometry args={[0.2, 0.035, 0.27]} />
@@ -321,7 +269,7 @@ function ArcLamp() {
     if (light.current) light.current.intensity = 2.5 + world.night * 3.5;
   });
   return (
-    <group position={[8.55, FLOOR, -3.05]}>
+    <group position={[8.55, FLOOR, -2.5]}>
       <mesh position={[0, 0.03, 0]} castShadow material={brass}>
         <cylinderGeometry args={[0.2, 0.22, 0.05, 28]} />
       </mesh>
@@ -434,9 +382,38 @@ function WindowRain() {
   });
 
   return (
-    <mesh position={[0, 7.3, -0.36]} rotation-y={Math.PI}>
-      <planeGeometry args={[22.4, 2.2]} />
+    <mesh position={[0, 6.85, -0.36]} rotation-y={Math.PI}>
+      <planeGeometry args={[22.4, 3.1]} />
       <meshBasicMaterial ref={mat} map={texture} transparent opacity={0} depthWrite={false} toneMapped={false} />
     </mesh>
+  );
+}
+
+/** The chai on the side table: take it and it's in your hand; it comes back fresh when you finish. */
+function TableTea() {
+  const { drink } = useUi();
+  const interact: Interactable = useMemo(
+    () => ({
+      label: 'Have the chai',
+      reach: 3,
+      onUse: () => {
+        if (ui.get().drink) return ui.toast('You already have a drink in your hand.');
+        ui.takeDrink({ kind: 'chai', name: DRINKS.chai.name, emoji: DRINKS.chai.emoji, sipsLeft: 4, from: 'corner' });
+        ui.toast('A warm glass of Kerala chai. Press ☕ Sip (or Q) to drink.');
+      },
+    }),
+    []
+  );
+  if (drink?.from === 'corner') return null;
+  return (
+    <group position={[-0.08, 0.57, 0.08]} userData={{ interact }}>
+      <mesh position={[0, 0.005, 0]}>
+        <cylinderGeometry args={[0.06, 0.055, 0.01, 24]} />
+        <meshStandardMaterial color="#f4f1ea" roughness={0.25} />
+      </mesh>
+      <group position={[0, 0.01, 0]}>
+        <Cup kind="chai" />
+      </group>
+    </group>
   );
 }

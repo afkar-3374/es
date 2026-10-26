@@ -60,6 +60,21 @@ export function Player({ start = [0, 1.2, 16.5] as [number, number, number], sta
       input.lookPitch = 0;
     }
 
+    // riding a vehicle: the vehicle moves the camera; park the walker out of the way
+    if (world.riding) {
+      b.setNextKinematicTranslation({ x: 0, y: -40, z: 0 });
+      world.player.set(world.riding.eye.x, world.riding.eye.y - 1.4, world.riding.eye.z);
+      return;
+    }
+    if (world.dismountAt) {
+      const d = world.dismountAt;
+      b.setTranslation({ x: d.x, y: d.y + HALF_HEIGHT + RADIUS + 0.1, z: d.z }, true);
+      world.dismountAt = null;
+      fall.current = 0;
+      yaw.current = Math.atan2(-(camera.getWorldDirection(new THREE.Vector3()).x), -(camera.getWorldDirection(new THREE.Vector3()).z));
+      return;
+    }
+
     // look
     yaw.current += input.lookYaw;
     pitch.current = THREE.MathUtils.clamp(pitch.current + input.lookPitch, -1.35, 1.35);
@@ -77,7 +92,8 @@ export function Player({ start = [0, 1.2, 16.5] as [number, number, number], sta
         yaw.current = world.seat.yaw;
         pitch.current = -0.05;
       }
-      if (Math.hypot(f, r) > 0.3) {
+      if (Math.hypot(f, r) > 0.3 || world.standRequest) {
+        world.standRequest = false;
         const s = world.seat.standAt;
         b.setTranslation({ x: s.x, y: s.y + HALF_HEIGHT + RADIUS + 0.05, z: s.z }, true);
         world.seat = null;

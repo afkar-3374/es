@@ -122,7 +122,7 @@ function Lobby() {
           FIRST FLOOR
         </Text>
         <Text font={FONT} position={[-0.6, 1.62, 0.07]} fontSize={0.09} color="#ffffff" anchorX="left" maxWidth={1.2}>
-          Library · stairs at the back
+          Library & café · stairs at the back
         </Text>
         <Text font={FONT} position={[-0.6, 1.28, 0.07]} fontSize={0.1} color="#ff8fbd" anchorX="left">
           GROUND FLOOR

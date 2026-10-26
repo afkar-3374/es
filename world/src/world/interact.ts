@@ -17,6 +17,8 @@ export interface Card {
   title: string;
   text: string;
   emoji?: string;
+  /** Buttons on the card (e.g. a café menu); the card closes after one is chosen */
+  actions?: { label: string; run: () => void }[];
 }
 
 export interface Book {
@@ -29,6 +31,22 @@ export interface Book {
   emoji: string;
 }
 
+export type DrinkKind = 'chai' | 'coffee' | 'cold';
+export interface Drink {
+  kind: DrinkKind;
+  name: string;
+  emoji: string;
+  sipsLeft: number;
+  /** where it came from ('corner' = the cup on the reading-corner table) */
+  from: 'corner' | 'cafe';
+}
+
+export interface Vehicle {
+  id: string;
+  name: string;
+  emoji: string;
+}
+
 type State = {
   hover: string | null;
   card: Card | null;
@@ -36,40 +54,93 @@ type State = {
   book: Book | null;
   /** The reader is open over the world */
   reading: boolean;
-  /** Sitting in the reading corner's armchair */
+  /** Sitting down somewhere */
   seated: boolean;
+  /** The book you're carrying around (taken off the shelf to read elsewhere) */
+  carrying: Book | null;
+  /** The drink in your hand */
+  drink: Drink | null;
+  /** Counts sips, so the hand animation plays once per sip */
+  sips: number;
+  /** A short message at the bottom of the screen */
+  toast: string | null;
+  /** The vehicle you're riding */
+  riding: Vehicle | null;
 };
-let state: State = { hover: null, card: null, book: null, reading: false, seated: false };
+let state: State = { hover: null, card: null, book: null, reading: false, seated: false, carrying: null, drink: null, sips: 0, toast: null, riding: null };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
+let toastTimer = 0;
+
+const set = (patch: Partial<State>) => {
+  state = { ...state, ...patch };
+  emit();
+};
 
 export const ui = {
   setHover(label: string | null) {
-    if (state.hover === label) return;
-    state = { ...state, hover: label };
-    emit();
+    if (state.hover !== label) set({ hover: label });
   },
   showCard(card: Card | null) {
-    state = { ...state, card };
-    emit();
+    set({ card });
   },
   takeBook(book: Book) {
-    state = { ...state, book, reading: false, hover: null };
-    emit();
+    set({ book, reading: false, hover: null });
   },
   openReader() {
-    if (!state.book || state.reading) return;
-    state = { ...state, reading: true };
-    emit();
+    if (state.book && !state.reading) set({ reading: true });
   },
+  /** Close the reader and put the book back on its shelf. */
   putBookBack() {
-    state = { ...state, book: null, reading: false };
-    emit();
+    set({ book: null, reading: false, carrying: null });
+  },
+  /** Close the reader but keep the book in your hand. */
+  carryBook() {
+    if (!state.book) return;
+    const book = state.book;
+    set({ carrying: book, book: null, reading: false });
+    ui.toast(`You’re carrying “${book.title}”. Find a seat and read it there.`);
+  },
+  /** Open the book you're carrying. */
+  readCarried() {
+    if (state.carrying) set({ book: state.carrying, reading: true, hover: null });
+  },
+  /** Close the book you're carrying (it stays in your hand). */
+  closeCarried() {
+    set({ book: null, reading: false });
+  },
+  returnBook() {
+    set({ carrying: null });
+    ui.toast('The book is back on its shelf.');
+  },
+  takeDrink(drink: Drink) {
+    set({ drink });
+  },
+  sip() {
+    const d = state.drink;
+    if (!d || d.sipsLeft <= 0) return;
+    const left = d.sipsLeft - 1;
+    set({ sips: state.sips + 1, drink: { ...d, sipsLeft: left } });
+    if (left <= 0) {
+      // the last sip: put the empty cup away a moment later
+      setTimeout(() => {
+        set({ drink: null });
+        ui.toast(`That was lovely! ${d.emoji}`);
+      }, 1400);
+    }
+  },
+  ride(vehicle: Vehicle | null) {
+    set({ riding: vehicle, hover: null });
+  },
+  toast(text: string | null) {
+    set({ toast: text });
+    if (text) {
+      clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => ui.toast(null), 4200);
+    }
   },
   setSeated(seated: boolean) {
-    if (state.seated === seated) return;
-    state = { ...state, seated, hover: null };
-    emit();
+    if (state.seated !== seated) set({ seated, hover: null });
   },
   get: () => state,
 };

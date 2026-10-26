@@ -84,8 +84,12 @@ export function Street() {
       <Poles />
       <StreetLights />
 
-      {/* Walkable ground */}
+      {/* Walkable ground, with invisible walls round the edge of the world */}
       <RigidBody type="fixed" colliders={false}>
+        <CuboidCollider args={[ROAD.length / 2, 5, 0.5]} position={[0, 4, -29]} />
+        <CuboidCollider args={[ROAD.length / 2, 5, 0.5]} position={[0, 4, 29]} />
+        <CuboidCollider args={[0.5, 5, 30]} position={[-ROAD.length / 2 + 5, 4, 0]} />
+        <CuboidCollider args={[0.5, 5, 30]} position={[ROAD.length / 2 - 5, 4, 0]} />
         <CuboidCollider args={[ROAD.length / 2, 0.5, 40]} position={[0, -0.5, 0]} />
         <CuboidCollider args={[ROAD.length / 2, FOOTPATH_H / 2, 2.5]} position={[0, FOOTPATH_H / 2, 2.5]} />
         <CuboidCollider args={[ROAD.length / 2, FOOTPATH_H / 2, 1.5]} position={[0, FOOTPATH_H / 2, 16.5]} />

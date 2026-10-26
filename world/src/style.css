@@ -53,3 +53,15 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 13px; font-w
 .seated { position: fixed; left: 50%; bottom: max(20px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 10px; width: max-content; max-width: calc(100% - 24px); padding: 10px 12px 10px 16px; border-radius: 22px; background: rgba(255, 250, 245, 0.9); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25); font-size: 14px; font-weight: 700; color: #3c3249; }
 .seated button { padding: 8px 14px; border: 0; border-radius: 999px; background: #2b2238; color: #fff; font: 800 13px "Nunito", sans-serif; cursor: pointer; }
 .seated button:first-of-type { background: linear-gradient(95deg, #f97316, #ec4899 52%, #8b5cf6); }
+
+/* Hands, toasts, card buttons */
+.hands { position: fixed; right: 14px; bottom: max(18px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.hands button, .card-actions button { padding: 10px 16px; border: 0; border-radius: 999px; background: rgba(255, 250, 245, 0.92); color: #2b2238; font: 800 14px "Nunito", sans-serif; cursor: pointer; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22); }
+.hands button small { margin-left: 6px; color: #c86a3a; letter-spacing: 1px; }
+.hands button.ghost, .card-actions button.ghost { background: rgba(43, 34, 56, 0.75); color: #fff; }
+.toast { position: fixed; left: 50%; top: max(64px, calc(env(safe-area-inset-top) + 56px)); transform: translateX(-50%); max-width: calc(100% - 24px); margin: 0; padding: 9px 16px; border-radius: 999px; background: rgba(43, 34, 56, 0.85); color: #fff; font-size: 14px; font-weight: 700; text-align: center; pointer-events: none; animation: pop 0.25s ease; }
+.card-actions { display: grid; gap: 8px; }
+.card-actions button:not(.ghost) { background: linear-gradient(95deg, #f97316, #ec4899 52%, #8b5cf6); color: #fff; }
+.reader-buttons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.seated.riding { background: rgba(255, 244, 214, 0.92); }
+@media (pointer: coarse) { .hands { bottom: 170px; } .seated { bottom: 160px; } }

@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import { useEffect, useMemo, useRef } from 'react';
-import { useFrame, useLoader } from '@react-three/fiber';
-import { useTexture } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
 import { CuboidCollider, RigidBody } from '@react-three/rapier';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
+import { applyFace, applyPose, instancePerson, SEATED, SIT_DROP, SMILE, usePersonSource } from './people';
 import { ui, type Interactable } from './interact';
 import { world } from './state';
 
@@ -12,92 +11,29 @@ import { world } from './state';
  * sitting on an office chair: she types, breathes, turns to look at you when you
  * come close, and waves when you say hi.
  */
-const DIR = `${import.meta.env.BASE_URL}people/receptionist/`;
-
-// The model points at .tga files on a Windows path; skip those, we attach web-sized textures ourselves.
-const manager = new THREE.LoadingManager();
-manager.setURLModifier((url) => (url.toLowerCase().endsWith('.tga') ? 'data:,' : url));
-
-/** Bone rotations (added to the model's T-pose) for sitting with hands at a keyboard. */
-const SEATED: [string, 'x' | 'y' | 'z', number][] = [
-  ['Bip01_L_Thigh', 'z', 1.5],
-  ['Bip01_R_Thigh', 'z', 1.5],
-  ['Bip01_L_Calf', 'z', -1.5],
-  ['Bip01_R_Calf', 'z', -1.5],
-  ['Bip01_L_UpperArm', 'y', 0.9],
-  ['Bip01_R_UpperArm', 'y', -0.9],
-  ['Bip01_L_UpperArm', 'z', -0.3],
-  ['Bip01_R_UpperArm', 'z', -0.3],
-  ['Bip01_L_Forearm', 'z', -1.27],
-  ['Bip01_R_Forearm', 'z', -1.27],
-];
-const SIT_DROP = 0.45; // the model stands on its feet; sitting lowers the hips this much
-
 export function Receptionist({ position, rotation = 0 }: { position: [number, number, number]; rotation?: number }) {
-  const fbx = useLoader(FBXLoader, `${DIR}receptionist.fbx`, (l) => {
-    (l as FBXLoader).manager = manager;
-  });
-  const tex = useTexture({
-    bodyMap: `${DIR}f018_body_color.webp`,
-    bodyNormal: `${DIR}f018_body_normal.webp`,
-    headMap: `${DIR}f018_head_color.webp`,
-    headNormal: `${DIR}f018_head_normal.webp`,
-    hairMap: `${DIR}f018_opacity_color.webp`,
-  });
-
-  const { model, bones, base } = useMemo(() => {
-    for (const k of ['bodyMap', 'headMap', 'hairMap'] as const) tex[k].colorSpace = THREE.SRGBColorSpace;
-    fbx.scale.setScalar(0.01); // centimetres → metres
-    fbx.traverse((o) => {
-      const mesh = o as THREE.SkinnedMesh;
-      if (!mesh.isMesh) return;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.frustumCulled = false;
-      const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as THREE.Material[];
-      mesh.material = mats.map((m) => {
-        const part = m.name.includes('head') ? 'head' : m.name.includes('opacity') ? 'hair' : 'body';
-        const std = new THREE.MeshStandardMaterial({
-          name: m.name,
-          map: part === 'head' ? tex.headMap : part === 'hair' ? tex.hairMap : tex.bodyMap,
-          normalMap: part === 'head' ? tex.headNormal : part === 'body' ? tex.bodyNormal : null,
-          roughness: part === 'head' ? 0.55 : 0.75,
-        });
-        if (part === 'hair') {
-          // hair strands and eyelashes
-          std.alphaTest = 0.4;
-          std.side = THREE.DoubleSide;
-          std.roughness = 0.6;
-        }
-        return std;
-      });
-    });
-
-    const bones: Record<string, THREE.Bone> = {};
-    fbx.traverse((o) => {
-      if ((o as THREE.Bone).isBone) bones[o.name] = o as THREE.Bone;
-    });
-    // Sit down, starting from the model's own T-pose every time (never twice)
-    if (!fbx.userData.tpose) {
-      fbx.userData.tpose = Object.fromEntries(Object.entries(bones).map(([n, b]) => [n, b.rotation.clone()]));
-    }
-    const tpose = fbx.userData.tpose as Record<string, THREE.Euler>;
-    for (const [n, b] of Object.entries(bones)) b.rotation.copy(tpose[n]);
-    for (const [name, axis, v] of SEATED) bones[name].rotation[axis] += v;
+  const source = usePersonSource('receptionist');
+  const { model, bones, base, lids } = useMemo(() => {
+    const { model, bones } = instancePerson(source, true);
+    applyPose(model, bones, SEATED);
+    applyFace(bones, SMILE);
     const base: Record<string, THREE.Euler> = {};
     for (const n of ['Bip01_Head', 'Bip01_Spine1', 'Bip01_L_Forearm', 'Bip01_R_Forearm', 'Bip01_R_UpperArm']) base[n] = bones[n].rotation.clone();
-    return { model: fbx, bones, base };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fbx, tex.bodyMap, tex.bodyNormal, tex.headMap, tex.headNormal, tex.hairMap]);
+    const lids = { L: bones.Bip01_LEyeBlinkTop.position.x, R: bones.Bip01_REyeBlinkTop.position.x };
+    // a little flower clip above her left ear (head-bone space, centimetres: x up, y forward, z left)
+    if (!bones.Bip01_Head.getObjectByName('hair-flower')) bones.Bip01_Head.add(hairFlower());
+    return { model, bones, base, lids };
+  }, [source]);
 
   useEffect(() => {
-    if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esReceptionist: model });
-  }, [model]);
+    if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esReceptionist: model, esBones: bones });
+  }, [model, bones]);
 
   // Little lifelike motions
   const group = useRef<THREE.Group>(null);
   const look = useRef(0);
   const wave = useRef(0); // seconds of waving left
+  const nextBlink = useRef(2);
   const tmp = useMemo(() => new THREE.Vector3(), []);
 
   useFrame(({ clock }, dt) => {
@@ -107,6 +43,12 @@ export function Receptionist({ position, rotation = 0 }: { position: [number, nu
 
     // breathing
     bones.Bip01_Spine1.rotation.z = base.Bip01_Spine1.z + Math.sin(t * 1.6) * 0.012;
+
+    // blink every few seconds
+    if (t > nextBlink.current) nextBlink.current = t + 2.5 + Math.random() * 3;
+    const blink = nextBlink.current - t < 0.14 ? 1 : 0;
+    bones.Bip01_LEyeBlinkTop.position.x = lids.L - blink * 1.0;
+    bones.Bip01_REyeBlinkTop.position.x = lids.R - blink * 1.0;
 
     // turn her head towards you when you're near and in front of the desk
     g.worldToLocal(tmp.copy(world.player));
@@ -118,6 +60,7 @@ export function Receptionist({ position, rotation = 0 }: { position: [number, nu
     bones.Bip01_Head.rotation.x = base.Bip01_Head.x + look.current;
     // look up a little at a standing visitor, down at the screen otherwise
     bones.Bip01_Head.rotation.z = base.Bip01_Head.z + (near ? 0.12 : -0.05);
+    bones.Bip01_Head.rotation.y = base.Bip01_Head.y + (near ? 0.12 : 0); // a little head tilt
 
     // typing when nobody is around; waving when greeted
     const typing = near ? 0.25 : 1;
@@ -143,7 +86,7 @@ export function Receptionist({ position, rotation = 0 }: { position: [number, nu
         ui.showCard({
           emoji: '👋',
           title: 'Hi, I’m Meera!',
-          text: 'Welcome to Electrosparkzz. The shops down here are getting ready to open. Head up the stairs at the back: the library has one bookcase open with four of our stories. Take your time!',
+          text: 'Welcome to Electrosparkzz! The shops down here are opening soon. Upstairs at the back there’s our library, with four of our stories and a little café: Anu makes a lovely filter coffee. Take a book, grab a chai and find a cosy seat. And if you like, the scooter, cycle, auto and car outside are yours to ride. Keep left!',
         });
       },
     }),
@@ -205,4 +148,26 @@ function OfficeChair() {
       ))}
     </group>
   );
+}
+
+/** A small pink flower hair clip (sized in the model's centimetres). */
+function hairFlower() {
+  const g = new THREE.Group();
+  g.name = 'hair-flower';
+  const petal = new THREE.MeshStandardMaterial({ color: '#ff8fb8', roughness: 0.5 });
+  const centre = new THREE.MeshStandardMaterial({ color: '#ffd166', roughness: 0.4 });
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8), petal);
+    m.scale.set(1, 0.45, 1);
+    m.position.set(Math.cos(a) * 1.0, 0, Math.sin(a) * 1.0);
+    g.add(m);
+  }
+  const c = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 8), centre);
+  c.position.y = 0.3;
+  g.add(c);
+  g.position.set(12.5, 3.0, 9.3);
+  g.scale.setScalar(1.5);
+  g.rotation.set(-0.9, 0, 0); // lying against the side of her head
+  return g;
 }

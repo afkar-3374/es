@@ -12,6 +12,9 @@ import { Interior } from './world/Interior';
 import { Stairs } from './world/Stairs';
 import { Library } from './world/Library';
 import { ReadingCorner } from './world/ReadingCorner';
+import { Cafe } from './world/Cafe';
+import { Held } from './world/Held';
+import { Vehicles } from './world/Vehicles';
 import { music } from './audio/music';
 import { Interactor } from './world/Interactor';
 import { requestUse } from './world/interact';
@@ -41,6 +44,9 @@ const cam = new URLSearchParams(location.search).get('cam')?.split(',').map(Numb
 const START: [number, number, number] = cam && cam.length >= 2 ? [cam[0], 1.2 + (cam[3] || 0), cam[1]] : [0, 1.2, 16.5];
 const START_YAW = cam && cam.length >= 3 ? cam[2] : 0;
 const START_PITCH = cam && cam.length >= 5 ? cam[4] : -0.05;
+
+// For profiling: ?off=vehicles,cafe,corner,library,held turns parts off
+const OFF = new Set((new URLSearchParams(location.search).get('off') ?? '').split(','));
 
 // For previews: ?debug exposes a way to press "use" from the console
 if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esUse: requestUse, esWorld: world });
@@ -92,12 +98,15 @@ export default function App() {
             <Building />
             <Interior />
             <Stairs />
-            <Library />
-            <ReadingCorner />
+            {!OFF.has('library') && <Library />}
+            {!OFF.has('corner') && <ReadingCorner />}
+            {!OFF.has('cafe') && <Cafe />}
+            {!OFF.has('vehicles') && <Vehicles c={c} />}
             <Player start={START} startYaw={START_YAW} startPitch={START_PITCH} />
           </Physics>
           <Palms spots={PALMS} />
           <Interactor />
+          {!OFF.has('held') && <Held />}
           <Rain intensity={c.weather.rain > 0.05 ? Math.min(0.25 + c.weather.rain / 5, 1) : 0} wind={c.weather.wind} />
         </Suspense>
       </Canvas>

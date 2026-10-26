@@ -19,6 +19,12 @@ export const world = {
   seat: null as null | { eye: THREE.Vector3; yaw: number; standAt: THREE.Vector3 },
   /** Current rain strength 0–1 (for rain on windows and sounds) */
   rain: 0,
+  /** Ask the visitor to stand up from their seat */
+  standRequest: false,
+  /** Riding a vehicle: the camera follows it, the walker is parked out of the way */
+  riding: null as null | { eye: THREE.Vector3; yaw: number },
+  /** After getting off a vehicle: where to put the walker */
+  dismountAt: null as null | THREE.Vector3,
 };
 
 /** Footprint of the Electrosparkzz building on the ground (x/z). */

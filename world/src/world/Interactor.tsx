@@ -31,9 +31,11 @@ export function Interactor() {
 
   useFrame(() => {
     // desktop: show what's under the crosshair (a few times a second is enough)
-    if (!isTouch && ++frame.current % 6 === 0) ui.setHover(pick(centre)?.label ?? null);
+    const riding = !!ui.get().riding;
+    if (!isTouch && ++frame.current % 6 === 0) ui.setHover(riding ? null : pick(centre)?.label ?? null);
     while (taps.length) {
       const t = taps.shift()!;
+      if (riding) continue; // clicks steer nothing while you ride
       pick(new THREE.Vector2(t.x, t.y))?.onUse();
     }
   });
