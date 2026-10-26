@@ -332,124 +332,209 @@ h1, h2, h3 { font-family: "Fredoka", "Nunito", sans-serif; font-weight: 600; mar
   .footer { justify-content: center; text-align: center; }
 }
 
-/* ── Book: one page at a time, turn with a swipe ─────────────── */
-.book-stage { position: relative; }
-.leaf { position: relative; max-width: 760px; margin: 0 auto 18px; }
-.leaf-scroll > .hero, .leaf-scroll > .section, .leaf-scroll > .gz-hero, .leaf-scroll > .gz-section { padding-top: 8px; }
-.book-ui, .swipe-hint { display: none; }
+/* ── The book ──────────────────────────────────────────────── */
+/* Without JavaScript: pages stack like a normal web page */
+.leaf { position: relative; max-width: 760px; margin: 0 auto 18px; padding: 24px 20px; }
+.book-ui, .swipe-hint, .desk-top { display: none; }
 
-/* Theme colours for each book's cover */
-body { --cover-a: #ffd3e4; --cover-b: #e7dcff; --cover-ink: var(--ink); --accent: var(--rose); }
-body.theme-triply { --cover-a: #c9ecff; --cover-b: #d4f6ea; --accent: #0e8fb8; }
-body.theme-herai { --cover-a: #f1d9ff; --cover-b: #ffd6e8; --accent: #b03fd6; }
-body.theme-glazy { --cover-a: #ffd3e4; --cover-b: #ffe6d4; --accent: #e04482; }
+/* Each book's cover colours */
+body { --cover-a: #ffc9de; --cover-b: #d9c9ff; --cover-edge: #c95b8d; --accent: var(--rose); }
+body.theme-triply { --cover-a: #bfe6ff; --cover-b: #c9f2e2; --cover-edge: #3c8fb3; --accent: #0e8fb8; }
+body.theme-herai { --cover-a: #ecd2ff; --cover-b: #ffd0e5; --cover-edge: #a557c9; --accent: #b03fd6; }
+body.theme-glazy { --cover-a: #ffcade; --cover-b: #ffe1cc; --cover-edge: #d9577f; --accent: #e04482; }
 
 html.has-book, html.has-book body { height: 100%; }
-html.has-book body { overflow: hidden; overscroll-behavior: none; }
-html.has-book .page { height: 100svh; display: flex; flex-direction: column; overflow: hidden; }
-html.has-book .topbar { position: relative; flex: none; padding-bottom: 8px; }
-html.has-book .book-stage { flex: 1; min-height: 0; display: flex; justify-content: center; padding: 6px 14px 4px; perspective: 2200px; }
-html.has-book .book {
+html.has-book body {
+  overflow: hidden;
+  overscroll-behavior: none;
+  /* a cute gingham tablecloth */
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 65%),
+    repeating-linear-gradient(0deg, rgba(255, 175, 205, 0.22) 0 22px, transparent 22px 44px),
+    repeating-linear-gradient(90deg, rgba(255, 175, 205, 0.22) 0 22px, transparent 22px 44px),
+    #fff7f1;
+}
+html.has-book .page { height: 100svh; display: flex; flex-direction: column; overflow: hidden; background: none; }
+html.has-book .blobs, html.has-book .topbar { display: none; }
+
+html.has-book .desk-top {
+  display: flex;
+  justify-content: center;
+  padding: max(10px, env(safe-area-inset-top)) 14px 0;
+}
+.desk-home { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.8); box-shadow: var(--shadow); text-decoration: none; font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 15px; }
+.desk-home img { border-radius: 9px; }
+
+html.has-book .book-stage {
   position: relative;
-  width: min(100%, 680px);
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 20px 10px;
+  perspective: 2600px;
+}
+html.has-book .book {
+  --pad: 10px;
+  position: relative;
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
+  transition: transform 0.7s cubic-bezier(0.3, 0.75, 0.25, 1);
 }
-/* A few pages peeking out underneath */
-html.has-book .book::before,
-html.has-book .book::after {
-  content: "";
-  position: absolute;
-  inset: 6px -5px -5px 4px;
-  border-radius: 8px 26px 26px 8px;
-  background: #f6ebe1;
-  box-shadow: 0 10px 30px rgba(120, 60, 110, 0.12);
+html[data-book-mode="single"] .book { width: min(100%, 520px); height: min(100%, 860px); }
+html[data-book-mode="spread"] .book {
+  width: min(1160px, 100%, calc((100svh - 150px) * 1.42));
+  aspect-ratio: 1.42;
 }
-html.has-book .book::after { inset: 3px -2.5px -2.5px 2px; background: #fbf3ea; }
+/* Closed: centre the cover (front) or the back cover */
+html[data-book-mode="spread"] .book.closed-front { transform: translateX(-25%); }
+html[data-book-mode="spread"] .book.closed-back { transform: translateX(25%); }
 
-html.has-book .leaf {
+/* Hardcover boards behind the pages */
+html.has-book .board {
   position: absolute;
-  inset: 0;
-  margin: 0;
-  max-width: none;
+  top: calc(var(--pad) * -1);
+  bottom: calc(var(--pad) * -1);
+  background:
+    radial-gradient(rgba(255, 255, 255, 0.35) 1.4px, transparent 1.6px) 0 0 / 18px 18px,
+    linear-gradient(150deg, var(--cover-a), var(--cover-b));
+  box-shadow: 0 24px 50px rgba(110, 50, 90, 0.25), 0 4px 10px rgba(110, 50, 90, 0.12), inset 0 0 0 3px rgba(255, 255, 255, 0.45);
+  transition: opacity 0.3s;
+}
+html[data-book-mode="spread"] .board-left { left: calc(var(--pad) * -1); right: 50%; border-radius: 14px 4px 4px 14px; opacity: 0; }
+html[data-book-mode="spread"] .board-right { left: 50%; right: calc(var(--pad) * -1); border-radius: 4px 14px 14px 4px; opacity: 0; }
+html[data-book-mode="spread"] .book.show-left .board-left,
+html[data-book-mode="spread"] .book.show-right .board-right { opacity: 1; }
+html[data-book-mode="single"] .board-left { display: none; }
+html[data-book-mode="single"] .board-right { left: -6px; right: calc(var(--pad) * -1); border-radius: 6px 16px 16px 6px; }
+
+/* Page edges: thicker on the side that still has more pages */
+html.has-book .edges { position: absolute; top: 4px; bottom: 4px; width: calc(var(--d, 0) * 1.4px + 2px); border-radius: 3px; opacity: 0; background: repeating-linear-gradient(90deg, #fffaf3 0 1px, #eadccd 1px 2px); transition: opacity 0.3s; }
+html.has-book .edges-right { --d: var(--right-depth); right: calc(var(--d, 0) * -1.4px - 2px); }
+html.has-book .edges-left { --d: var(--left-depth); left: calc(var(--d, 0) * -1.4px - 2px); }
+html.has-book .book.show-right .edges-right { opacity: 1; }
+html[data-book-mode="spread"] .book.show-left .edges-left { opacity: 1; }
+
+/* Ribbon bookmark */
+html.has-book .ribbon {
+  position: absolute;
+  z-index: 2000;
+  top: -10px;
+  width: 16px;
+  height: calc(100% + 46px);
+  background: linear-gradient(90deg, #e94f8a, #ff7aa8 50%, #e94f8a);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 10px), 0 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+  opacity: 0.92;
+  transition: opacity 0.3s;
+}
+/* only its tail shows, hanging out below the pages */
+html.has-book .ribbon { top: auto; bottom: -40px; height: 48px; }
+html[data-book-mode="spread"] .ribbon { left: calc(50% + 60px); }
+html[data-book-mode="single"] .ribbon { right: 44px; }
+html[data-book-mode="spread"] .book.closed-front .ribbon,
+html[data-book-mode="spread"] .book.closed-back .ribbon { opacity: 0; }
+
+/* Sheets and their two faces */
+html.has-book .sheets { position: absolute; inset: 0; }
+html.has-book .sheet {
+  position: absolute;
+  top: 0;
+  bottom: 0;
   transform-origin: left center;
   transform-style: preserve-3d;
   will-change: transform;
 }
-html.has-book .leaf.is-past:not(.turning) { visibility: hidden; }
-html.has-book .leaf-front,
-html.has-book .leaf-back {
+html[data-book-mode="single"] .sheet { left: 0; width: 100%; }
+html[data-book-mode="spread"] .sheet { left: 50%; width: 50%; }
+html.has-book .face {
   position: absolute;
   inset: 0;
-  border-radius: 8px 26px 26px 8px;
+  overflow: hidden;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  overflow: hidden;
 }
-html.has-book .leaf-front {
+html.has-book .face.back { transform: rotateY(180deg); }
+/* Paper, with a soft shadow down the spine */
+html.has-book .face.front {
+  background: linear-gradient(90deg, rgba(110, 70, 50, 0.16), rgba(110, 70, 50, 0.04) 18px, rgba(110, 70, 50, 0) 44px), #fffdf8;
+}
+html.has-book .face.back {
+  background: linear-gradient(270deg, rgba(110, 70, 50, 0.16), rgba(110, 70, 50, 0.04) 18px, rgba(110, 70, 50, 0) 44px), #fffaf2;
+}
+html[data-book-mode="spread"] .face.front { border-radius: 2px 10px 10px 2px; }
+html[data-book-mode="spread"] .face.back { border-radius: 10px 2px 2px 10px; }
+html[data-book-mode="single"] .face.front { border-radius: 4px 14px 14px 4px; box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05); }
+html[data-book-mode="single"] .face.back { border-radius: 14px 4px 4px 14px; background: radial-gradient(rgba(236, 72, 153, 0.07) 1px, transparent 1.2px) 0 0 / 18px 18px, #fbf2e8; }
+html.has-book .sheet:not(.is-turned) .face.front { box-shadow: 1px 0 0 rgba(120, 80, 60, 0.08); }
+html.has-book .face-shade { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(90deg, rgba(43, 34, 56, 0) 35%, rgba(43, 34, 56, 0.5)); }
+html.has-book .face.back .face-shade { background: linear-gradient(270deg, rgba(43, 34, 56, 0) 35%, rgba(43, 34, 56, 0.5)); }
+
+/* Covers are the hardcover itself */
+html.has-book .face.is-cover {
   background:
-    linear-gradient(90deg, rgba(120, 70, 50, 0.1), rgba(120, 70, 50, 0) 26px),
-    #fffdf9;
-  box-shadow: 0 16px 40px rgba(120, 60, 110, 0.16), inset 0 0 0 2px #fff;
+    radial-gradient(rgba(255, 255, 255, 0.45) 1.4px, transparent 1.6px) 0 0 / 18px 18px,
+    linear-gradient(150deg, var(--cover-a), var(--cover-b));
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.5), inset 10px 0 18px -10px rgba(0, 0, 0, 0.25);
 }
-html.has-book .leaf-back {
-  transform: rotateY(180deg);
-  background:
-    linear-gradient(270deg, rgba(120, 70, 50, 0.12), rgba(120, 70, 50, 0) 30px),
-    radial-gradient(rgba(236, 72, 153, 0.08) 1px, transparent 1.2px) 0 0 / 20px 20px,
-    #fbf1e7;
-  border-radius: 26px 8px 8px 26px;
-}
-html.has-book .leaf-shade {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  background: linear-gradient(90deg, rgba(43, 34, 56, 0) 40%, rgba(43, 34, 56, 0.55));
-}
-html.has-book .leaf-scroll {
+html.has-book .face.back.is-cover { box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.5), inset -10px 0 18px -10px rgba(0, 0, 0, 0.25); }
+
+/* Page content */
+html.has-book .leaf { position: absolute; inset: 0; margin: 0; max-width: none; padding: 0; }
+html.has-book .page-scroll {
   position: absolute;
   inset: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 26px 26px 54px 34px;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  padding: 30px 28px 54px 38px;
 }
-html.has-book .leaf-scroll > * { padding-left: 0; padding-right: 0; }
-html.has-book .folio {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 14px;
-  text-align: center;
-  font-family: "Fredoka", sans-serif;
-  font-weight: 600;
-  font-size: 14px;
-  color: #b9a7b4;
-  pointer-events: none;
-}
-html.has-book .leaf.turning .leaf-front { box-shadow: 0 30px 60px rgba(60, 30, 60, 0.28); }
+html.has-book .page-scroll::-webkit-scrollbar { display: none; }
+html.has-book .face.back .page-scroll { padding: 30px 38px 54px 28px; }
+html.has-book .leaf.cover .page-scroll { display: flex; flex-direction: column; }
+html.has-book .leaf.cover .page-scroll > * { margin-top: auto; margin-bottom: auto; }
+html.has-book .folio { position: absolute; left: 0; right: 0; bottom: 16px; text-align: center; font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 13px; color: #c0aebb; pointer-events: none; }
+html.has-book .folio::before, html.has-book .folio::after { content: "~"; margin: 0 6px; color: #e2cfd9; }
 
-/* Covers */
-html.has-book .leaf.cover .leaf-front {
-  background:
-    radial-gradient(rgba(255, 255, 255, 0.5) 1.4px, transparent 1.6px) 0 0 / 22px 22px,
-    linear-gradient(150deg, var(--cover-a), var(--cover-b));
-}
-html.has-book .leaf.cover .leaf-scroll { display: flex; flex-direction: column; }
-html.has-book .leaf.cover .leaf-scroll > * { margin-top: auto; margin-bottom: auto; }
+/* Contents page */
+.toc-list { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 4px; counter-reset: toc; }
+.toc-list a { display: flex; align-items: baseline; gap: 8px; padding: 9px 4px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 16px; color: var(--ink); }
+.toc-list a:hover { background: rgba(255, 211, 228, 0.5); }
+.toc-list span { flex: none; max-width: 75%; }
+.toc-list i { flex: 1; border-bottom: 2px dotted #e2cfd9; transform: translateY(-4px); }
+.toc-list b { font-family: "Fredoka", sans-serif; font-weight: 600; color: var(--accent); }
+
+/* Compact the shared sections so a page fits */
+html.has-book .hero { padding: 0; }
+html.has-book .hero .logo img { width: min(220px, 52%); }
+html.has-book .hero h1 { font-size: clamp(32px, 4.6vw, 54px); }
+html.has-book .hero .eyebrow { margin: 12px 0 10px; }
+html.has-book .hero .lead { margin: 12px 0 18px; font-size: 16px; }
+html.has-book .mascot { width: 70px; height: 70px; }
+html.has-book .section { padding: 0; }
+html.has-book .section h2 { font-size: clamp(26px, 3.6vw, 40px); }
+html.has-book .about-card { box-shadow: none; border: 0; background: transparent; padding: 6px 0; }
+html.has-book .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+html.has-book .card { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; padding: 14px; }
+html.has-book .card h3 { flex: none; font-size: 21px; }
+html.has-book .card p { flex: 1 1 auto; flex-basis: auto; font-size: 13px; }
+html.has-book .card .card-icon { width: 44px; height: 44px; font-size: 22px; border-radius: 14px; margin-bottom: 4px; }
+html.has-book .card .tag { font-size: 12px; }
+html.has-book .gz-cards { grid-template-columns: 1fr; }
+html[data-book-mode="spread"] .hero .mascot-row { margin-bottom: 0; }
 
 /* Page furniture */
 .chapter { margin: 0 0 10px; font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 14px; letter-spacing: 0.04em; color: var(--accent); }
 .chapter b { display: inline-grid; place-items: center; width: 26px; height: 26px; margin-right: 8px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 13px; }
-.book-page h2 { font-size: clamp(28px, 4.6vw, 42px); margin-bottom: 14px; }
-.book-page p { color: var(--muted); font-size: 17px; margin: 0 0 14px; }
+.book-page h2 { font-size: clamp(26px, 3.4vw, 38px); margin-bottom: 14px; }
+.book-page p { color: var(--muted); font-size: 16px; margin: 0 0 12px; }
 .book-page p strong { color: var(--ink); }
-.book-page .art { font-size: 54px; line-height: 1; margin: 6px 0 16px; }
-.book-page .quote { margin: 18px 0 0; padding: 16px 18px; border-radius: 20px; background: linear-gradient(150deg, var(--cover-a), var(--cover-b)); font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 19px; color: var(--ink); }
-.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 18px 0 0; padding: 0; list-style: none; }
+.book-page .art { font-size: 50px; line-height: 1; margin: 4px 0 14px; }
+.book-page .quote { margin: 16px 0 0; padding: 14px 18px; border-radius: 20px; background: rgba(255, 255, 255, 0.75); font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 19px; color: var(--ink); }
+.facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0 0; padding: 0; list-style: none; }
 .facts li { padding: 12px 14px; border-radius: 18px; background: #fff; box-shadow: inset 0 0 0 2px #f4e6ee; font-size: 14px; color: var(--muted); }
 .facts li b { display: block; font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 17px; color: var(--ink); }
 .areas { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
@@ -458,77 +543,60 @@ html.has-book .leaf.cover .leaf-scroll > * { margin-top: auto; margin-bottom: au
 .areas b { display: block; font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 17px; }
 .areas p { margin: 2px 0 0; font-size: 15px; }
 .planned { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: #fff; border: 2px dashed var(--accent); color: var(--accent); font-weight: 800; font-size: 13px; }
-.cover-title { font-size: clamp(56px, 12vw, 96px); font-weight: 700; line-height: 0.95; }
-.cover-sub { margin: 10px 0 18px; font-family: "Fredoka", sans-serif; font-weight: 600; font-size: clamp(19px, 3.4vw, 26px); color: var(--ink); }
-.cover-meta { margin-top: 18px; font-size: 14px; color: var(--muted); font-weight: 700; }
+.cover-title { font-size: clamp(54px, 7vw, 92px); font-weight: 700; line-height: 0.95; }
+.cover-sub { margin: 10px 0 16px; font-family: "Fredoka", sans-serif; font-weight: 600; font-size: clamp(18px, 2.2vw, 24px); color: var(--ink); }
+.cover-meta { margin-top: 16px; font-size: 14px; color: var(--muted); font-weight: 700; }
 .cover-center { text-align: center; display: flex; flex-direction: column; align-items: center; }
-.read-on { margin-top: 22px; }
+.read-on { margin-top: 18px; }
 .small-note { font-size: 13px !important; color: #9a8ea6 !important; }
 
-/* Bottom controls */
+/* Toolbar under the book */
 html.has-book .book-ui {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 12px;
-  width: min(100% - 28px, 680px);
-  margin: 6px auto max(10px, env(safe-area-inset-bottom));
+  gap: 8px;
+  width: min(100% - 24px, 460px);
+  margin: 4px auto max(10px, env(safe-area-inset-bottom));
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
 }
 .book-ui button {
   flex: none;
-  width: 46px;
-  height: 46px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
-  border: 2px solid #fff;
-  background: #fff;
-  box-shadow: var(--shadow);
+  border: 0;
+  background: #fff3f8;
   font-family: "Fredoka", sans-serif;
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1;
   color: var(--ink);
   cursor: pointer;
-  transition: transform 0.15s, opacity 0.2s;
+  transition: transform 0.15s, opacity 0.2s, background 0.2s;
 }
-.book-ui button:not(:disabled):active { transform: scale(0.92); }
+.book-ui button:hover:not(:disabled) { background: var(--pink); }
+.book-ui button:not(:disabled):active { transform: scale(0.9); }
 .book-ui button:disabled { opacity: 0.35; cursor: default; }
-.book-ui [data-next] { background: var(--grad); color: #fff; border-color: transparent; }
-.book-ui .track { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.book-ui .bar { width: 100%; height: 6px; border-radius: 999px; background: #f3e3ea; overflow: hidden; }
-.book-ui .bar span { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--grad); transition: width 0.5s cubic-bezier(.25,.8,.25,1); }
-.book-ui [data-counter] { font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 14px; color: var(--muted); }
-
-/* Compact cover and headings inside the book so a page fits the screen */
-html.has-book .hero { padding: 6px 0 10px; }
-html.has-book .hero .logo img { width: min(230px, 52vw); }
-html.has-book .hero h1 { font-size: clamp(34px, 5.6vw, 58px); }
-html.has-book .hero .eyebrow { margin: 12px 0 10px; }
-html.has-book .hero .lead { margin: 12px 0 18px; font-size: 16px; }
-html.has-book .mascot { width: 72px; height: 72px; }
-html.has-book .section { padding: 0; }
-html.has-book .section h2 { font-size: clamp(28px, 4.4vw, 42px); }
-html.has-book .about-card { box-shadow: none; border: 0; background: transparent; padding: 10px 0; }
-@media (max-height: 700px) {
-  html.has-book .swipe-hint { display: none; }
-}
-@media (max-height: 760px) {
-  html.has-book .mascot-row { display: none; }
-  html.has-book .hero .logo img { width: min(170px, 44vw); }
-}
-
-/* Products inside the book: a tidy 2 × 2 grid */
-html.has-book .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-html.has-book .card { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; }
-html.has-book .card h3 { flex: none; }
-html.has-book .card p { flex: 1 1 auto; flex-basis: auto; }
+.book-ui [data-next] { background: var(--grad); color: #fff; }
+.book-ui [data-sound], .book-ui [data-contents] { font-size: 17px; }
+.book-ui .track { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.book-ui .bar { width: 100%; height: 5px; border-radius: 999px; background: #f3e3ea; overflow: hidden; }
+.book-ui .bar span { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--grad); transition: width 0.6s cubic-bezier(0.25, 0.8, 0.25, 1); }
+.book-ui [data-counter] { font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 13px; color: var(--muted); white-space: nowrap; }
 
 html.has-book .swipe-hint {
   display: block;
   position: absolute;
+  z-index: 3000;
   left: 50%;
   translate: -50% 0;
-  bottom: 12px;
+  bottom: 22px;
   white-space: nowrap;
-  z-index: 1000;
   padding: 8px 14px;
   border-radius: 999px;
   background: var(--ink);
@@ -543,16 +611,17 @@ html.has-book .swipe-hint {
 @keyframes nudge { 50% { transform: translateX(-10px); } }
 
 @media (max-width: 560px) {
-  html.has-book .book-stage { padding: 4px 10px 2px; }
-  html.has-book .leaf-scroll { padding: 20px 18px 50px 26px; }
-  .book-page p { font-size: 16px; }
-  .facts { grid-template-columns: 1fr 1fr; }
-  html.has-book .cards { grid-template-columns: 1fr 1fr; gap: 10px; }
-  html.has-book .card { padding: 14px; }
-  html.has-book .card h3 { font-size: 21px; }
-  html.has-book .card p { font-size: 13px; }
-  html.has-book .card .card-icon { width: 44px; height: 44px; font-size: 22px; border-radius: 14px; margin-bottom: 4px; }
-  html.has-book .card .tag { font-size: 12px; }
+  html.has-book .book-stage { padding: 12px 16px 6px 12px; }
+  html.has-book .book { --pad: 7px; }
+  html.has-book .page-scroll { padding: 22px 18px 48px 26px; }
+  .book-page p { font-size: 15.5px; }
+  .desk-home span { display: none; }
+  html.has-book .desk-home { padding: 6px; }
+}
+@media (max-height: 700px) {
+  html.has-book .swipe-hint { display: none; }
+  html.has-book .mascot-row { display: none; }
+  html.has-book .hero .logo img { width: min(160px, 44%); }
 }
 
 /* Respect "reduce motion" */
