@@ -5,6 +5,7 @@ import { Environment, Sky, Stars } from '@react-three/drei';
 import { skyDirection, type Conditions } from '../env/kasaragod';
 import { world } from './state';
 import { canvasTexture } from './materials';
+import { isTouch } from '../player/input';
 
 const lerp = THREE.MathUtils.lerp;
 const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
@@ -102,7 +103,7 @@ export function Atmosphere({ c }: { c: Conditions }) {
         color={sunColor}
         intensity={sunIntensity}
         castShadow={day > 0.05}
-        shadow-mapSize={[2048, 2048]}
+        shadow-mapSize={isTouch ? [1024, 1024] : [2048, 2048]}
         shadow-camera-left={-45}
         shadow-camera-right={45}
         shadow-camera-top={45}

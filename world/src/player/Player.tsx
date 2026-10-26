@@ -5,6 +5,7 @@ import { CapsuleCollider, RigidBody, useRapier, type RapierRigidBody } from '@re
 import type { Collider, KinematicCharacterController } from '@dimforge/rapier3d-compat';
 import { input } from './input';
 import { insideBuilding, world } from '../world/state';
+import { ui } from '../world/interact';
 
 const HALF_HEIGHT = 0.55;
 const RADIUS = 0.3;
@@ -14,7 +15,7 @@ const RUN = 3.6;
 const GRAVITY = -9.81;
 
 /** You, in first person: walk, look around, climb steps, bump into walls. */
-export function Player({ start = [0, 1.2, 16.5] as [number, number, number], startYaw = 0 }) {
+export function Player({ start = [0, 1.2, 16.5] as [number, number, number], startYaw = 0, startPitch = -0.05 }) {
   const body = useRef<RapierRigidBody>(null);
   const collider = useRef<Collider | null>(null);
   const controller = useRef<KinematicCharacterController | null>(null);
@@ -22,7 +23,7 @@ export function Player({ start = [0, 1.2, 16.5] as [number, number, number], sta
   const { camera } = useThree();
 
   const yaw = useRef(startYaw);
-  const pitch = useRef(-0.05);
+  const pitch = useRef(startPitch);
   const fall = useRef(0);
   const bob = useRef(0);
   const speedNow = useRef(0);
@@ -51,6 +52,13 @@ export function Player({ start = [0, 1.2, 16.5] as [number, number, number], sta
     if (!b || !c) return;
     if (!collider.current) collider.current = b.collider(0);
 
+    // while a book is open, you stand still and the world waits
+    const busy = ui.get().book !== null || ui.get().card !== null;
+    if (busy) {
+      input.lookYaw = 0;
+      input.lookPitch = 0;
+    }
+
     // look
     yaw.current += input.lookYaw;
     pitch.current = THREE.MathUtils.clamp(pitch.current + input.lookPitch, -1.35, 1.35);
@@ -58,8 +66,8 @@ export function Player({ start = [0, 1.2, 16.5] as [number, number, number], sta
     input.lookPitch = 0;
 
     // walk relative to where you're facing
-    const f = input.forward + input.joystick.y;
-    const r = input.right + input.joystick.x;
+    const f = busy ? 0 : input.forward + input.joystick.y;
+    const r = busy ? 0 : input.right + input.joystick.x;
     const len = Math.min(Math.hypot(f, r), 1);
     const target = len > 0.01 ? (input.run || len > 0.92 ? (input.run ? RUN : WALK * 1.25) : WALK) * len : 0;
     speedNow.current += (target - speedNow.current) * Math.min(dt * 6, 1); // ease in/out like a real step

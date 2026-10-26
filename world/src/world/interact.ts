@@ -19,8 +19,25 @@ export interface Card {
   emoji?: string;
 }
 
-type State = { hover: string | null; card: Card | null };
-let state: State = { hover: null, card: null };
+export interface Book {
+  id: string;
+  title: string;
+  subtitle: string;
+  /** The book page on the site, opened in the reader */
+  url: string;
+  colors: [string, string];
+  emoji: string;
+}
+
+type State = {
+  hover: string | null;
+  card: Card | null;
+  /** The book taken off the shelf (it flies to you), or null */
+  book: Book | null;
+  /** The reader is open over the world */
+  reading: boolean;
+};
+let state: State = { hover: null, card: null, book: null, reading: false };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
@@ -34,6 +51,20 @@ export const ui = {
     state = { ...state, card };
     emit();
   },
+  takeBook(book: Book) {
+    state = { ...state, book, reading: false, hover: null };
+    emit();
+  },
+  openReader() {
+    if (!state.book || state.reading) return;
+    state = { ...state, reading: true };
+    emit();
+  },
+  putBookBack() {
+    state = { ...state, book: null, reading: false };
+    emit();
+  },
+  get: () => state,
 };
 
 export function useUi(): State {

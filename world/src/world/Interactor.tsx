@@ -10,6 +10,7 @@ export function Interactor() {
   const ray = useMemo(() => new THREE.Raycaster(), []);
   const centre = useMemo(() => new THREE.Vector2(0, 0), []);
   const frame = useRef(0);
+  if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esScene: scene, esCamera: camera, esTHREE: THREE });
 
   const pick = (ndc: THREE.Vector2): Interactable | null => {
     ray.setFromCamera(ndc, camera);

@@ -34,7 +34,7 @@ export function Interior() {
       {SHOPS.map((s) => (
         <Shop key={s.unit} {...s} />
       ))}
-      <BackOfArcade />
+      <LibrarySign />
       <ArcadeLights />
     </group>
   );
@@ -85,7 +85,7 @@ function Lobby() {
           FIRST FLOOR
         </Text>
         <Text font={FONT} position={[-0.6, 1.62, 0.07]} fontSize={0.09} color="#ffffff" anchorX="left" maxWidth={1.2}>
-          Library · opening soon
+          Library · stairs at the back
         </Text>
         <Text font={FONT} position={[-0.6, 1.28, 0.07]} fontSize={0.1} color="#ff8fbd" anchorX="left">
           GROUND FLOOR
@@ -362,61 +362,31 @@ function Shop({ unit, side, z0, z1 }: { unit: string; side: -1 | 1; z0: number; 
   );
 }
 
-/* ── Back of the arcade (the stairs arrive here next) ─────────── */
+/* ── Sign pointing to the library stairs ──────────────────────── */
 
-function BackOfArcade() {
-  const stand = useMemo(() => new THREE.MeshStandardMaterial({ color: '#2a2530', roughness: 0.4, metalness: 0.4 }), []);
-  const interact: Interactable = useMemo(
-    () => ({
-      label: 'The library · opening soon',
-      onUse: () =>
-        ui.showCard({
-          emoji: '📚',
-          title: 'The library is upstairs',
-          text: 'Stairs to the first floor are being built right here. Soon you will be able to climb up, open the bookcase and read our stories in a cosy corner.',
-        }),
-    }),
-    []
-  );
+function LibrarySign() {
+  const board = useMemo(() => new THREE.MeshStandardMaterial({ color: '#2b2238', roughness: 0.35, metalness: 0.3 }), []);
+  const rod = useMemo(() => new THREE.MeshStandardMaterial({ color: '#9aa0a6', roughness: 0.3, metalness: 0.9 }), []);
   return (
-    <group position={[0, FLOOR, -17.4]}>
-      {/* a free-standing sign on a stand */}
-      <group userData={{ interact }}>
-        <mesh position={[0, 0.55, 0]} castShadow material={stand}>
-          <cylinderGeometry args={[0.03, 0.03, 1.1, 10]} />
+    <group position={[0, CEIL, -7.2]}>
+      {[-0.6, 0.6].map((x) => (
+        <mesh key={x} position={[x, -0.3, 0]} material={rod}>
+          <cylinderGeometry args={[0.01, 0.01, 0.6, 6]} />
         </mesh>
-        <mesh position={[0, 0.02, 0]} material={stand}>
-          <cylinderGeometry args={[0.25, 0.25, 0.04, 20]} />
-        </mesh>
-        <mesh position={[0, 1.45, 0]} castShadow>
-          <boxGeometry args={[1.1, 0.8, 0.04]} />
-          <meshStandardMaterial color="#fff8f2" roughness={0.5} />
-        </mesh>
-        <Text font={FONT} position={[0, 1.6, 0.025]} fontSize={0.13} color="#2b2238" anchorX="center">
-          LIBRARY
-        </Text>
-        <Text font={FONT} position={[0, 1.38, 0.025]} fontSize={0.08} color="#7a6f86" anchorX="center" maxWidth={0.95} textAlign="center">
-          First floor · the stairs are coming here soon
-        </Text>
-      </group>
-      {/* soft barrier ropes */}
-      {[-1.4, 1.4].map((x) => (
-        <group key={x} position={[x, 0, 0.8]}>
-          <mesh position={[0, 0.45, 0]} material={stand}>
-            <cylinderGeometry args={[0.035, 0.035, 0.9, 10]} />
-          </mesh>
-          <mesh position={[0, 0.02, 0]} material={stand}>
-            <cylinderGeometry args={[0.18, 0.18, 0.04, 16]} />
-          </mesh>
+      ))}
+      <mesh position={[0, -0.78, 0]} castShadow material={board}>
+        <boxGeometry args={[1.9, 0.42, 0.05]} />
+      </mesh>
+      {[1, -1].map((f) => (
+        <group key={f} rotation-y={f === 1 ? 0 : Math.PI}>
+          <Text font={FONT} position={[0, -0.72, 0.03]} fontSize={0.13} letterSpacing={0.14} color="#ffd38f" anchorX="center" anchorY="middle">
+            LIBRARY · FIRST FLOOR
+          </Text>
+          <Text font={FONT} position={[0, -0.88, 0.03]} fontSize={0.075} color="#e9e4ef" anchorX="center" anchorY="middle">
+            stairs at the back of the arcade
+          </Text>
         </group>
       ))}
-      <mesh position={[0, 0.82, 0.8]} rotation-z={Math.PI / 2}>
-        <cylinderGeometry args={[0.025, 0.025, 2.8, 8]} />
-        <meshStandardMaterial color="#b3164f" roughness={0.6} />
-      </mesh>
-      <RigidBody type="fixed" colliders={false}>
-        <CuboidCollider args={[1.5, 0.5, 0.1]} position={[0, 0.5, 0.8]} />
-      </RigidBody>
     </group>
   );
 }
@@ -431,13 +401,18 @@ function ArcadeLights() {
   });
   return (
     <group>
-      {[-7, -10.5, -14, -17.5].map((z) => (
+      {[-7].map((z) => (
         <mesh key={z} position={[0, CEIL - 0.03, z]} rotation-x={Math.PI / 2} material={panel}>
           <planeGeometry args={[2.4, 0.5]} />
         </mesh>
       ))}
-      {[-8, -15].map((z, i) => (
-        <pointLight key={z} ref={(l) => (lights.current[i] = l)} position={[0, CEIL - 0.6, z]} color="#fff0dc" distance={14} decay={1.4} />
+      {[[0, -7.5], [0, -16]].map(([x, z], i) => (
+        <pointLight key={i} ref={(l) => (lights.current[i] = l)} position={[x, CEIL - 0.6, z]} color="#fff0dc" distance={14} decay={1.4} />
+      ))}
+      {[[-2.2, -15.5], [2.2, -15.5]].map(([x, z]) => (
+        <mesh key={x} position={[x, CEIL - 0.03, z]} rotation-x={Math.PI / 2} material={panel}>
+          <planeGeometry args={[0.8, 2.4]} />
+        </mesh>
       ))}
     </group>
   );

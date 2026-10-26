@@ -4,7 +4,7 @@ import { isTouch } from '../player/input';
 
 /** Crosshair, "what you're looking at" hint, and the info card. */
 export function Overlay() {
-  const { hover, card } = useUi();
+  const { hover, card, book } = useUi();
 
   // Close the card with Esc / E / Enter; free the mouse while it's open
   useEffect(() => {
@@ -19,8 +19,8 @@ export function Overlay() {
 
   return (
     <>
-      {!isTouch && !card && <div className={`crosshair${hover ? ' on' : ''}`} />}
-      {hover && !card && <p className="hover-hint">{isTouch ? 'Tap' : 'Click'} · {hover}</p>}
+      {!isTouch && !card && !book && <div className={`crosshair${hover ? ' on' : ''}`} />}
+      {hover && !card && !book && <p className="hover-hint">{isTouch ? 'Tap' : 'Click'} · {hover}</p>}
       {card && (
         <div className="card-wrap" onClick={() => ui.showCard(null)}>
           <div className="info-card" role="dialog" aria-label={card.title} onClick={(e) => e.stopPropagation()}>

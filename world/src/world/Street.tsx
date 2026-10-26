@@ -163,7 +163,8 @@ function StreetLights() {
           <mesh position={[0, 7.85, 1.6]} material={lampMat}>
             <boxGeometry args={[0.35, 0.08, 0.7]} />
           </mesh>
-          <pointLight ref={(l) => (lights.current[i] = l)} position={[0, 7.4, 1.6]} color="#ffd9a6" distance={22} decay={1.6} intensity={0} />
+          {/* only the lamps by the building really light the street; the rest just glow (cheaper) */}
+          {Math.abs(x) <= 18 && <pointLight ref={(l) => (lights.current[i] = l)} position={[0, 7.4, 1.6]} color="#ffd9a6" distance={24} decay={1.5} intensity={0} />}
         </group>
       ))}
       <RigidBody type="fixed" colliders={false}>

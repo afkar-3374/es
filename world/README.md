@@ -13,7 +13,7 @@ Preview a moment without waiting for it (these only change the view, nothing els
 
 - `?time=19:30` — that time in Kasaragod today
 - `?weather=clear|cloudy|rain|storm|fog`
-- `?cam=x,z,yaw` — start somewhere else (the street runs along x; the building is at z −20…0)
+- `?cam=x,z,yaw[,height,pitch]` — start somewhere else (the street runs along x; the building is at z −20…0; height 4.5 = first floor)
 
 Time, sun and moon follow Kasaragod (12.50° N, 74.99° E); live weather comes from Open-Meteo.
 Credits: see public/CREDITS.txt.

@@ -24,6 +24,16 @@ const WALL = 0.3;
 const DOOR_W = 4; // entrance opening
 const DOOR_X = 0;
 
+/** The opening in the first floor where the stairs come up (x0, x1, z0, z1). */
+export const STAIRWELL = { x0: -1.1, x1: 1.1, z0: -17.3, z1: -10.0 };
+/** The slab around the stairwell, as rectangles [x0, x1, z0, z1]. */
+const SLAB_PARTS: [number, number, number, number][] = [
+  [BUILDING.minX, STAIRWELL.x0, BUILDING.minZ, BUILDING.maxZ],
+  [STAIRWELL.x1, BUILDING.maxX, BUILDING.minZ, BUILDING.maxZ],
+  [STAIRWELL.x0, STAIRWELL.x1, STAIRWELL.z1, BUILDING.maxZ],
+  [STAIRWELL.x0, STAIRWELL.x1, BUILDING.minZ, STAIRWELL.z0],
+];
+
 export function Building() {
   const plaster = usePBR('painted_plaster_wall', [4, 2], { tint: '#f4ede3', normalScale: 0.5 });
   const plasterSide = usePBR('painted_plaster_wall', [7, 3], { tint: '#efe6da', normalScale: 0.5 });
@@ -35,7 +45,6 @@ export function Building() {
   const aluminium = useMemo(() => new THREE.MeshStandardMaterial({ color: '#c9ccd1', roughness: 0.3, metalness: 0.85 }), []);
   const ceiling = useMemo(() => new THREE.MeshStandardMaterial({ color: '#f4f2ee', roughness: 0.9 }), []);
   const panelLight = useMemo(() => new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#fff1dc', emissiveIntensity: 1.2 }), []);
-  const libraryGlow = useMemo(() => new THREE.MeshStandardMaterial({ color: '#2b2622', emissive: '#ffb86b', emissiveIntensity: 0, roughness: 0.6 }), []);
   const signWhite = useMemo(() => new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#ffffff', emissiveIntensity: 0, toneMapped: false }), []);
   const signPink = useMemo(() => new THREE.MeshStandardMaterial({ color: '#ff5d8f', emissive: '#ff4f95', emissiveIntensity: 0, toneMapped: false }), []);
   const tank = useMemo(() => new THREE.MeshStandardMaterial({ color: '#151515', roughness: 0.35 }), []);
@@ -46,7 +55,6 @@ export function Building() {
     const n = world.night;
     signWhite.emissiveIntensity = 0.15 + n * 2.2;
     signPink.emissiveIntensity = 0.25 + n * 3;
-    libraryGlow.emissiveIntensity = 0.15 + n * 1.4;
     if (signLight.current) signLight.current.intensity = n * 14;
     // indoor lights are always on; they read brighter at night
     lobbyLights.current.forEach((l) => l && (l.intensity = 9 + n * 6));
@@ -69,15 +77,20 @@ export function Building() {
       <mesh position={[0, PLINTH + 0.01, -D / 2]} rotation-x={-Math.PI / 2} receiveShadow material={terrazzo}>
         <planeGeometry args={[W - WALL * 2, D - WALL * 2]} />
       </mesh>
-      <mesh position={[0, GF_TOP - 0.01, -D / 2]} rotation-x={Math.PI / 2} material={ceiling}>
-        <planeGeometry args={[W - WALL * 2, D - WALL * 2]} />
-      </mesh>
-      <mesh position={[0, GF_TOP + 0.15, -D / 2]} castShadow receiveShadow material={concrete}>
-        <boxGeometry args={[W, 0.3, D]} />
-      </mesh>
+      {/* first-floor slab, with the stairwell cut out of it */}
+      {SLAB_PARTS.map(([x0, x1, z0, z1], i) => (
+        <group key={i}>
+          <mesh position={[(x0 + x1) / 2, GF_TOP + 0.15, (z0 + z1) / 2]} castShadow receiveShadow material={concrete}>
+            <boxGeometry args={[x1 - x0, 0.3, z1 - z0]} />
+          </mesh>
+          <mesh position={[(x0 + x1) / 2, GF_TOP - 0.01, (z0 + z1) / 2]} rotation-x={Math.PI / 2} material={ceiling}>
+            <planeGeometry args={[x1 - x0, z1 - z0]} />
+          </mesh>
+        </group>
+      ))}
       {/* Ceiling light panels in the lobby */}
       {[-6, 0, 6].flatMap((x) =>
-        [-4, -11, -17].map((z) => (
+        [-4, -11, -17].filter((z) => !(x === 0 && z < STAIRWELL.z1)).map((z) => (
           <mesh key={`${x}${z}`} position={[x, GF_TOP - 0.03, z]} rotation-x={Math.PI / 2} material={panelLight}>
             <planeGeometry args={[1.2, 1.2]} />
           </mesh>
@@ -165,7 +178,8 @@ export function Building() {
           SPARKZZ
         </Text>
       </group>
-      <pointLight ref={signLight} position={[0, 5.2, front + 1.6]} color="#ff7ab0" distance={12} decay={2} intensity={0} />
+      {/* lights the sign from just below the library floor, so it can't leak onto the floor inside */}
+      <pointLight ref={signLight} position={[0, 4.3, front + 1.7]} color="#ff7ab0" distance={6} decay={2} intensity={0} />
 
       {/* first floor: plaster with a long window band (the library) */}
       <mesh position={[0, 6.0, front - 0.15]} castShadow receiveShadow material={plaster}>
@@ -181,10 +195,6 @@ export function Building() {
       ))}
       <mesh position={[0, 7.3, front - 0.32]} material={glass}>
         <boxGeometry args={[W - 1.6, 2.2, 0.03]} />
-      </mesh>
-      {/* warm library light seen through the windows */}
-      <mesh position={[0, 7.2, front - 1.2]} material={libraryGlow}>
-        <planeGeometry args={[W - 1.6, 2.6]} />
       </mesh>
       {Array.from({ length: 11 }, (_, i) => (
         <mesh key={i} position={[-sideX + 0.8 + ((W - 1.6) / 10) * i, 7.3, front - 0.3]} castShadow material={aluminium}>
@@ -224,7 +234,9 @@ export function Building() {
         <CuboidCollider args={[W / 2, PLINTH / 2, D / 2]} position={[0, PLINTH / 2, -D / 2]} />
         <CuboidCollider args={[DOOR_W / 2 + 1, 0.1, 0.6]} position={[DOOR_X, 0.1, front + 0.9]} />
         {/* ceiling of the ground floor */}
-        <CuboidCollider args={[W / 2, 0.15, D / 2]} position={[0, GF_TOP + 0.15, -D / 2]} />
+        {SLAB_PARTS.map(([x0, x1, z0, z1], i) => (
+          <CuboidCollider key={i} args={[(x1 - x0) / 2, 0.15, (z1 - z0) / 2]} position={[(x0 + x1) / 2, GF_TOP + 0.15, (z0 + z1) / 2]} />
+        ))}
       </RigidBody>
     </group>
   );
