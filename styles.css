@@ -634,3 +634,6 @@ html.has-book .swipe-hint {
   html.has-book .swipe-hint { display: none; }
   html { scroll-behavior: auto; }
 }
+
+/* the 3D link on the cover */
+a.status { text-decoration: none; color: inherit; }

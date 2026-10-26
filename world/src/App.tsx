@@ -1,0 +1,81 @@
+import * as THREE from 'three';
+import { Suspense, useCallback, useState } from 'react';
+import { Canvas } from '@react-three/fiber';
+import { Physics } from '@react-three/rapier';
+import { useConditions } from './env/useConditions';
+import { Atmosphere } from './world/Atmosphere';
+import { Rain } from './world/Rain';
+import { Street } from './world/Street';
+import { Neighbours } from './world/Neighbours';
+import { Building } from './world/Building';
+import { Palms, type PalmSpot } from './world/Palms';
+import { Player } from './player/Player';
+import { Hud } from './ui/Hud';
+import { Intro } from './ui/Intro';
+import { TouchControls } from './ui/TouchControls';
+import { isTouch } from './player/input';
+
+/** Lock the mouse to the world for looking around (browsers may refuse; that's fine). */
+function lockPointer() {
+  try {
+    const result = document.querySelector('canvas')?.requestPointerLock?.() as unknown as Promise<void> | undefined;
+    result?.catch?.(() => {});
+  } catch {
+    /* not allowed here */
+  }
+}
+
+// For previews: ?cam=x,z,yaw starts the visitor somewhere else
+const cam = new URLSearchParams(location.search).get('cam')?.split(',').map(Number);
+const START: [number, number, number] = cam && cam.length >= 2 ? [cam[0], 1.2, cam[1]] : [0, 1.2, 16.5];
+const START_YAW = cam && cam.length >= 3 ? cam[2] : 0;
+
+// Coconut palms along both footpaths (not in front of the entrance)
+const PALMS: PalmSpot[] = [
+  ...[-58, -44, -27, 27, 44, 58, 80, -80, 104, -104].map((x) => ({ x, z: 3.6 })),
+  ...[-70, -50, -31, -12, 7, 26, 47, 68, 92, -92].map((x) => ({ x, z: 16.9 })),
+];
+
+export default function App() {
+  const c = useConditions();
+  const [entered, setEntered] = useState(false);
+
+  const enter = useCallback(() => {
+    setEntered(true);
+    if (!isTouch) lockPointer();
+  }, []);
+
+  return (
+    <>
+      <Canvas
+        shadows="soft"
+        dpr={[1, Math.min(window.devicePixelRatio, isTouch ? 1.5 : 2)]}
+        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        camera={{ fov: 70, near: 0.08, far: 1600, position: [0, 1.85, 16.5] }}
+        onCreated={({ gl }) => {
+          gl.toneMapping = THREE.ACESFilmicToneMapping;
+          gl.toneMappingExposure = 0.95;
+        }}
+        onClick={() => {
+          if (entered && !isTouch && !document.pointerLockElement) lockPointer();
+        }}
+      >
+        <Suspense fallback={null}>
+          <Atmosphere c={c} />
+          <Physics gravity={[0, -9.81, 0]}>
+            <Street />
+            <Neighbours />
+            <Building />
+            <Player start={START} startYaw={START_YAW} />
+          </Physics>
+          <Palms spots={PALMS} />
+          <Rain intensity={c.weather.rain > 0.05 ? Math.min(0.25 + c.weather.rain / 5, 1) : 0} wind={c.weather.wind} />
+        </Suspense>
+      </Canvas>
+
+      {entered && <Hud c={c} />}
+      {entered && isTouch && <TouchControls />}
+      {!entered && <Intro c={c} onEnter={enter} />}
+    </>
+  );
+}

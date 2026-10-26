@@ -1,0 +1,5 @@
+Electrosparkzz World — credits
+
+Textures: Poly Haven (https://polyhaven.com), CC0.
+Font: Poppins, SIL Open Font License 1.1 (fonts/OFL.txt).
+Live weather: Open-Meteo (https://open-meteo.com), CC BY 4.0.
