@@ -256,7 +256,7 @@
       const isTurned = i < turned;
       sheet.classList.toggle('is-turned', isTurned);
       sheet.style.zIndex = isTurned ? String(i + 1) : String(total * 2 - i);
-      sheet.style.transform = isTurned ? 'rotateY(-180deg)' : '';
+      setAngle(sheet, isTurned ? -180 : 0);
       const onTop = mode === 'single' ? i === turned : i === turned || i === turned - 1;
       sheet.style.visibility = onTop ? '' : 'hidden';
     });
@@ -293,14 +293,35 @@
 
   /* ── Turning ──────────────────────────────────────────────── */
   const maxTurned = () => (mode === 'single' ? sheets.length - 1 : sheets.length);
+  const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+  /**
+   * Turn a sheet to an angle (0 = lying on the right, -180 = on the left). The face
+   * pointing away is hidden by hand: animated content (stars, fade-ins) gets its own
+   * layer, and browsers then show it mirrored through the page.
+   */
+  function setAngle(sheet, angle) {
+    sheet.style.transform = angle === 0 ? '' : `rotateY(${angle}deg)`;
+    const frontUp = angle > -90;
+    const [front, back] = sheet.children;
+    front.style.visibility = frontUp ? '' : 'hidden';
+    back.style.visibility = frontUp ? 'hidden' : '';
+    const lift = Math.sin((Math.abs(angle) / 180) * Math.PI) * 0.32;
+    front.querySelector('.face-shade').style.opacity = frontUp ? String(lift) : '0';
+    back.querySelector('.face-shade').style.opacity = frontUp ? '0' : String(lift);
+  }
 
   function animateSheet(sheet, from, to, ms) {
-    const shade = sheet.querySelector(to < from ? '.face.front .face-shade' : '.face.back .face-shade');
-    if (shade) shade.animate([{ opacity: 0 }, { opacity: 0.32, offset: 0.5 }, { opacity: 0 }], { duration: ms });
-    return sheet.animate([{ transform: `rotateY(${from}deg)` }, { transform: `rotateY(${to}deg)` }], {
-      duration: ms,
-      easing: 'cubic-bezier(.3,.75,.25,1)',
-    }).finished;
+    return new Promise((resolve) => {
+      const start = performance.now();
+      const frame = (now) => {
+        const t = Math.min((now - start) / ms, 1);
+        setAngle(sheet, from + (to - from) * easeInOut(t));
+        if (t < 1) requestAnimationFrame(frame);
+        else resolve();
+      };
+      requestAnimationFrame(frame);
+    });
   }
 
   async function turnTo(target, fromAngle, withSound = true) {
@@ -436,9 +457,7 @@
     const p = Math.min(Math.max((drag.dir > 0 ? -dx : dx) / Math.max(width, 1), 0), 1);
     drag.p = p;
     drag.angle = drag.dir > 0 ? -180 * p : -180 + 180 * p;
-    drag.sheet.style.transform = `rotateY(${drag.angle}deg)`;
-    const shade = drag.sheet.querySelector(drag.dir > 0 ? '.face.front .face-shade' : '.face.back .face-shade');
-    if (shade) shade.style.opacity = String(Math.sin(p * Math.PI) * 0.32);
+    setAngle(drag.sheet, drag.angle);
   });
 
   const endDrag = async (e) => {
@@ -448,7 +467,6 @@
     if (!d.active) return;
     suppressClick = true;
     setTimeout(() => (suppressClick = false), 60);
-    d.sheet.querySelectorAll('.face-shade').forEach((s) => (s.style.opacity = ''));
     const speed = (e.clientX - d.x) / Math.max(performance.now() - d.t, 1);
     const flick = d.dir > 0 ? speed < -0.45 : speed > 0.45;
     const angle = d.angle ?? (d.dir > 0 ? 0 : -180);
