@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Suspense, useCallback, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Physics } from '@react-three/rapier';
 import { useConditions } from './env/useConditions';
@@ -11,6 +11,8 @@ import { Building } from './world/Building';
 import { Interior } from './world/Interior';
 import { Stairs } from './world/Stairs';
 import { Library } from './world/Library';
+import { ReadingCorner } from './world/ReadingCorner';
+import { music } from './audio/music';
 import { Interactor } from './world/Interactor';
 import { requestUse } from './world/interact';
 import { Palms, type PalmSpot } from './world/Palms';
@@ -53,9 +55,14 @@ export default function App() {
   const c = useConditions();
   const [entered, setEntered] = useState(false);
   const { book } = useUi();
+  // the sound of rain follows the weather (once you've entered, so audio is allowed)
+  useEffect(() => {
+    if (entered) music.setRain(c.weather.rain > 0.05 ? Math.min(0.3 + c.weather.rain / 4, 1) : 0);
+  }, [entered, c.weather.rain]);
 
   const enter = useCallback(() => {
     setEntered(true);
+    music.setRain(world.rain);
     if (!isTouch) lockPointer();
   }, []);
 
@@ -86,6 +93,7 @@ export default function App() {
             <Interior />
             <Stairs />
             <Library />
+            <ReadingCorner />
             <Player start={START} startYaw={START_YAW} startPitch={START_PITCH} />
           </Physics>
           <Palms spots={PALMS} />

@@ -26,6 +26,7 @@ export function Player({ start = [0, 1.2, 16.5] as [number, number, number], sta
   const pitch = useRef(startPitch);
   const fall = useRef(0);
   const bob = useRef(0);
+  const seated = useRef<typeof world.seat>(null);
   const speedNow = useRef(0);
 
   useEffect(() => {
@@ -68,6 +69,26 @@ export function Player({ start = [0, 1.2, 16.5] as [number, number, number], sta
     // walk relative to where you're facing
     const f = busy ? 0 : input.forward + input.joystick.y;
     const r = busy ? 0 : input.right + input.joystick.x;
+
+    // sitting in a chair: look around freely; any step stands you up
+    if (world.seat) {
+      if (seated.current !== world.seat) {
+        seated.current = world.seat;
+        yaw.current = world.seat.yaw;
+        pitch.current = -0.05;
+      }
+      if (Math.hypot(f, r) > 0.3) {
+        const s = world.seat.standAt;
+        b.setTranslation({ x: s.x, y: s.y + HALF_HEIGHT + RADIUS + 0.05, z: s.z }, true);
+        world.seat = null;
+        seated.current = null;
+        ui.setSeated(false);
+      } else {
+        camera.position.copy(world.seat.eye);
+        camera.rotation.set(pitch.current, yaw.current, 0, 'YXZ');
+        return;
+      }
+    }
     const len = Math.min(Math.hypot(f, r), 1);
     const target = len > 0.01 ? (input.run || len > 0.92 ? (input.run ? RUN : WALK * 1.25) : WALK) * len : 0;
     speedNow.current += (target - speedNow.current) * Math.min(dt * 6, 1); // ease in/out like a real step

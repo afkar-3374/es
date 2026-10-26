@@ -36,8 +36,10 @@ type State = {
   book: Book | null;
   /** The reader is open over the world */
   reading: boolean;
+  /** Sitting in the reading corner's armchair */
+  seated: boolean;
 };
-let state: State = { hover: null, card: null, book: null, reading: false };
+let state: State = { hover: null, card: null, book: null, reading: false, seated: false };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
@@ -62,6 +64,11 @@ export const ui = {
   },
   putBookBack() {
     state = { ...state, book: null, reading: false };
+    emit();
+  },
+  setSeated(seated: boolean) {
+    if (state.seated === seated) return;
+    state = { ...state, seated, hover: null };
     emit();
   },
   get: () => state,

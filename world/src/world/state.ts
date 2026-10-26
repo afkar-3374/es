@@ -15,6 +15,10 @@ export const world = {
   wind: 8,
   /** true while the visitor is inside the building (no rain indoors) */
   indoors: false,
+  /** Sitting in a chair: where your eyes are and which way you face; null when standing */
+  seat: null as null | { eye: THREE.Vector3; yaw: number; standAt: THREE.Vector3 },
+  /** Current rain strength 0–1 (for rain on windows and sounds) */
+  rain: 0,
 };
 
 /** Footprint of the Electrosparkzz building on the ground (x/z). */

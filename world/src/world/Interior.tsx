@@ -7,6 +7,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { canvasTexture, usePBR } from './materials';
 import { ui, type Interactable } from './interact';
 import { world } from './state';
+import { Receptionist } from './Receptionist';
 
 const FONT = `${import.meta.env.BASE_URL}fonts/Poppins-SemiBold.ttf`;
 const FLOOR = 0.3;
@@ -50,25 +51,61 @@ function Lobby() {
   const dark = useMemo(() => new THREE.MeshStandardMaterial({ color: '#2a2530', roughness: 0.4, metalness: 0.3 }), []);
   const board = useMemo(() => new THREE.MeshStandardMaterial({ color: '#1f1b26', roughness: 0.3, metalness: 0.2 }), []);
   const glow = useMemo(() => new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#ffd8ec', emissiveIntensity: 1.4, toneMapped: false }), []);
+  const screen = useMemo(() => new THREE.MeshStandardMaterial({ map: logo, color: '#ffffff', emissive: '#ffffff', emissiveMap: logo, emissiveIntensity: 0.8, roughness: 0.2 }), [logo]);
 
   return (
     <group>
-      {/* Info desk on the left of the entrance, with the logo on its front */}
+      {/* Reception desk on the left of the entrance: a tall front counter with the logo,
+          and a lower work surface behind it for Meera's computer */}
       <group position={[-6.5, FLOOR, -2.8]}>
-        <mesh position={[0, 0.55, 0]} castShadow receiveShadow material={white}>
-          <boxGeometry args={[3.2, 1.1, 0.8]} />
+        <mesh position={[0, 0.47, 0.25]} castShadow receiveShadow material={white}>
+          <boxGeometry args={[3.2, 0.94, 0.3]} />
         </mesh>
-        <mesh position={[0, 1.13, -0.05]} castShadow material={wood}>
-          <boxGeometry args={[3.4, 0.06, 1.0]} />
+        <mesh position={[0, 0.97, 0.22]} castShadow material={wood}>
+          <boxGeometry args={[3.4, 0.06, 0.5]} />
         </mesh>
-        <mesh position={[0, 0.62, 0.41]}>
-          <planeGeometry args={[1.5, 0.7]} />
+        <mesh position={[0, 0.52, 0.41]}>
+          <planeGeometry args={[1.4, 0.65]} />
           <meshStandardMaterial map={logo} transparent roughness={0.4} />
         </mesh>
         <mesh position={[0, 0.06, 0.42]} material={glow}>
           <boxGeometry args={[3.0, 0.03, 0.02]} />
         </mesh>
+        {/* work surface and its side panels */}
+        <mesh position={[0, 0.74, -0.25]} castShadow receiveShadow material={white}>
+          <boxGeometry args={[3.2, 0.04, 0.7]} />
+        </mesh>
+        {[-1.58, 1.58].map((x) => (
+          <mesh key={x} position={[x, 0.37, -0.25]} castShadow material={white}>
+            <boxGeometry args={[0.04, 0.74, 0.7]} />
+          </mesh>
+        ))}
+        {/* monitor, keyboard, mouse and a little plant */}
+        <group position={[-0.75, 0.76, -0.25]} rotation-y={0.35}>
+          <mesh position={[0, 0.01, 0]} material={dark}>
+            <boxGeometry args={[0.22, 0.02, 0.16]} />
+          </mesh>
+          <mesh position={[0, 0.14, 0.02]} material={dark}>
+            <boxGeometry args={[0.04, 0.26, 0.03]} />
+          </mesh>
+          <mesh position={[0, 0.34, 0]} castShadow material={dark}>
+            <boxGeometry args={[0.62, 0.38, 0.03]} />
+          </mesh>
+          <mesh position={[0, 0.34, -0.016]} rotation-y={Math.PI} material={screen}>
+            <planeGeometry args={[0.58, 0.34]} />
+          </mesh>
+        </group>
+        <mesh position={[-0.25, 0.77, -0.48]} castShadow material={dark}>
+          <boxGeometry args={[0.45, 0.02, 0.15]} />
+        </mesh>
+        <mesh position={[0.15, 0.77, -0.47]} material={dark}>
+          <boxGeometry args={[0.06, 0.02, 0.1]} />
+        </mesh>
+        <group position={[1.1, 0.76, -0.1]} scale={0.45}>
+          <Plant position={[0, 0, 0]} />
+        </group>
       </group>
+      <Receptionist position={[-6.5, FLOOR + 0.06, -3.75]} />
 
       {/* Floor directory, facing the entrance */}
       <group position={[4.6, FLOOR, -4.2]}>
@@ -109,7 +146,7 @@ function Lobby() {
       ))}
 
       <RigidBody type="fixed" colliders={false}>
-        <CuboidCollider args={[1.7, 0.6, 0.5]} position={[-6.5, FLOOR + 0.6, -2.85]} />
+        <CuboidCollider args={[1.7, 0.6, 0.55]} position={[-6.5, FLOOR + 0.6, -2.85]} />
         <CuboidCollider args={[0.75, 1.25, 0.1]} position={[4.6, FLOOR + 1.25, -4.2]} />
       </RigidBody>
     </group>

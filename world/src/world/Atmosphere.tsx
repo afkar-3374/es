@@ -47,7 +47,8 @@ export function Atmosphere({ c }: { c: Conditions }) {
   useEffect(() => {
     world.night = clamp01(1 - day * 1.4);
     world.wind = c.weather.wind;
-  }, [day, c.weather.wind]);
+    world.rain = c.weather.rain > 0.05 ? rainy : 0;
+  }, [day, c.weather.wind, c.weather.rain, rainy]);
   useFrame((_, dt) => {
     const targetWet = c.weather.rain > 0.05 ? clamp01(0.45 + rainy) : 0;
     world.wet += (targetWet - world.wet) * Math.min(dt * 0.15, 1);
