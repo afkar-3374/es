@@ -2,18 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#FFF8F2" />
-    <meta name="description" content="Glazy by Electrosparkzz: a private, end-to-end encrypted little world for couples. Chat, calls, love taps, games and a garden you grow together." />
-    <meta property="og:title" content="Glazy — a private little world for two" />
-    <meta property="og:description" content="End-to-end encrypted chat, calls, games and a garden, made only for couples." />
+    <meta name="description" content="Glazy by Electrosparkzz: a private, end-to-end encrypted little world for couples. Chat, call, love taps, games and a garden you grow together." />
+    <link rel="canonical" href="https://electrosparkzz.in/glazy.html" />
+    <meta property="og:title" content="Glazy — a private little world for two · Electrosparkzz" />
+    <meta property="og:description" content="Glazy by Electrosparkzz: a private, end-to-end encrypted little world for couples. Chat, call, love taps, games and a garden you grow together." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://electrosparkzz.in/glazy.html" />
     <meta property="og:image" content="https://electrosparkzz.in/assets/og-glazy.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <link rel="canonical" href="https://electrosparkzz.in/glazy.html" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Glazy — a private little world for two · Electrosparkzz" />
+    <meta name="twitter:description" content="Glazy by Electrosparkzz: a private, end-to-end encrypted little world for couples. Chat, call, love taps, games and a garden you grow together." />
     <meta name="twitter:image" content="https://electrosparkzz.in/assets/og-glazy.png" />
     <title>Glazy — a private little world for two · Electrosparkzz</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
@@ -22,7 +24,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body class="theme-glazy">
     <div class="page" id="top">
       <div class="blobs" aria-hidden="true"><span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span></div>
 
@@ -40,120 +42,152 @@
         </nav>
       </header>
 
-      <main>
-      <section class="gz-hero">
-        <div class="stickers" aria-hidden="true">
-          <span class="sticker s1">♥</span><span class="sticker s2">✦</span><span class="sticker s3">★</span><span class="sticker s4">✿</span>
-        </div>
-        <p class="eyebrow reveal">💗 An Electrosparkzz product</p>
-        <div class="gz-mark reveal" aria-hidden="true">
-          <img src="assets/glazy-icon.svg" alt="" width="88" height="88" />
-        </div>
-        <h1 class="gz-title reveal"><span class="grad">Glazy</span></h1>
-        <p class="lead reveal">A private little world for two. Chat, call, play and grow a garden together, in a space that only the two of you can read.</p>
-        <div class="gz-actions reveal">
-          <span class="status"><b></b> Coming soon</span>
-          <a class="btn" href="https://glazy.electrosparkzz.in" rel="noopener">Try the early preview →</a>
-        </div>
-      </section>
+      <div class="book-stage">
+        <main class="book" data-book aria-label="About Glazy, a little book">
+          <section class="leaf cover" id="cover" aria-label="Cover">
+            <div class="book-page cover-center">
+              <div class="gz-mark" aria-hidden="true"><img src="assets/glazy-icon.svg" alt="" width="92" height="92" /></div>
+              <h1 class="cover-title" style="margin-top:16px"><span class="grad">Glazy</span></h1>
+              <p class="cover-sub">A private little world for two.</p>
+              <p>Chat, call, play and grow a garden together, in a space that only the two of you can read.</p>
+              <div class="cta-row">
+                <span class="status"><b></b> Coming soon</span>
+                <a class="btn" href="#purpose" data-turn>Read more →</a>
+              </div>
+              <p class="cover-meta">An Electrosparkzz product · early preview at <a href="https://glazy.electrosparkzz.in">glazy.electrosparkzz.in</a></p>
+            </div>
+          </section>
+          <section class="leaf" id="purpose" aria-label="The purpose">
+            <div class="book-page">
+              <p class="chapter"><b>1</b>The purpose</p>
+              <h2>Made for couples, <span class="grad">and only couples.</span></h2>
+              <p>Most apps mix your relationship in with everyone else. Glazy is one shared space for exactly two people. Nobody else can join it, see it, or read it. That includes us.</p>
+              <div class="gz-cards">
+                <article class="gz-card"><span>💬</span><h3>Chat</h3><p>Messages, photos, videos, voice notes and files, with replies, reactions, pins and read receipts.</p></article>
+                <article class="gz-card"><span>📞</span><h3>Calls</h3><p>Voice and video calls with ringtones, plus switching between phone, speaker and Bluetooth.</p></article>
+                <article class="gz-card"><span>💗</span><h3>Love taps &amp; hugs</h3><p>Send a tap when you’re thinking of them, or hold a heart together for a virtual hug.</p></article>
+              </div>
+            </div>
+          </section>
+          <section class="leaf" id="inside" aria-label="What else is inside">
+            <div class="book-page">
+              <p class="chapter"><b>1</b>What else is inside</p>
+              <h2>Little things <span class="grad">to share.</span></h2>
+              <div class="gz-cards">
+                <article class="gz-card"><span>🎮</span><h3>Daily games</h3><p>A question a day, “how well do you know me”, would-you-rather, tic-tac-toe and a daily doodle.</p></article>
+                <article class="gz-card"><span>🌱</span><h3>A garden &amp; a world</h3><p>Everything you do earns love points that grow your garden, plus a small 3D island you can walk around together.</p></article>
+                <article class="gz-card"><span>🐱</span><h3>Discreet</h3><p>On your phone Glazy is called Kitty Timer, has a stopwatch icon and opens as a real timer. Only you know the secret taps that open it.</p></article>
+              </div>
+            </div>
+          </section>
+          <section class="leaf" id="how" aria-label="How to use it">
+            <div class="book-page">
+              <p class="chapter"><b>2</b>How to use it</p>
+              <h2>Set up together, <span class="grad">in a minute.</span></h2>
+              <ol class="gz-steps">
+                <li><b>Open Glazy on your phone</b><span>Go to <a href="https://glazy.electrosparkzz.in">glazy.electrosparkzz.in</a>. Install it so it behaves like a normal app. On Android, tap <i>Install</i> (or ⋮ → <i>Add to Home screen</i>). On iPhone, tap <i>Share → Add to Home Screen</i>. On your home screen it shows up as <b>Kitty Timer</b> with a stopwatch icon.</span></li>
+                <li><b>Tap the kitty 5 times</b><span>Glazy opens as a Kitty Timer. Tap the kitty <b>five times quickly</b> to create your couple space.</span></li>
+                <li><b>Fill in both of you</b><span>Partner 1 enters a name, a Glazy ID (like <i>sam.k</i>) and a 6-digit PIN, then hands the phone over. Partner 2 does the same. IDs are checked as you type, so you’ll know straight away if one is taken.</span></li>
+              </ol>
+            </div>
+          </section>
+          <section class="leaf" id="how-2" aria-label="How to use it, continued">
+            <div class="book-page">
+              <p class="chapter"><b>2</b>How to use it, continued</p>
+              <ol class="gz-steps" start="4" style="counter-reset: step 3">
+                <li><b>Pick whose phone it is</b><span>Glazy creates your space and logs that phone in.</span></li>
+                <li><b>Log in on the other phone</b><span>Open Glazy, tap the kitty <b>three times</b>, then enter your ID and PIN.</span></li>
+                <li><b>Every time after that</b><span>Three taps on the kitty, then your PIN. If Glazy sits in the background for a while, it goes back to looking like a timer.</span></li>
+              </ol>
+              <p class="gz-note">Turn on notifications in the app to get messages and calls even when Glazy is closed. On iPhone this needs iOS 16.4 or newer, with Glazy added to the Home Screen.</p>
+            </div>
+          </section>
+          <section class="leaf" id="privacy" aria-label="Privacy and encryption">
+            <div class="book-page">
+              <p class="chapter"><b>3</b>Privacy &amp; encryption</p>
+              <h2>End-to-end encrypted, <span class="grad">for real.</span></h2>
+              <p>Your messages are locked on your phone before they are sent, and only your partner’s phone can unlock them. Our servers store scrambled data they cannot read.</p>
+              <div class="gz-panel">
+                <ul>
+                  <li><b>One key per couple.</b> When you register, your phone creates a random 256-bit key just for your couple. Everything is encrypted with it using AES-256-GCM.</li>
+                  <li><b>Locked with your PIN.</b> Each of you gets a copy of that key, locked with a key made from your own PIN (PBKDF2-SHA-256, 600,000 rounds). The server only ever holds these locked copies.</li>
+                  <li><b>Your PIN never leaves your phone.</b> To log in, your phone sends a value derived from your PIN, not the PIN itself. The server mixes it with a secret only it knows before checking it.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+          <section class="leaf" id="privacy-2" aria-label="More on privacy">
+            <div class="book-page">
+              <p class="chapter"><b>3</b>More on privacy</p>
+              <div class="gz-panel">
+                <ul>
+                  <li><b>Guessing is stopped.</b> After 5 wrong PINs, that ID is locked for 15 minutes.</li>
+                  <li><b>Couples are sealed off.</b> Database rules make sure each couple can only reach its own data, live rooms and files. Even a signed-in user can’t touch another couple’s space.</li>
+                  <li><b>Calls are encrypted too.</b> Calls use WebRTC (DTLS-SRTP) and go straight between your phones when possible. A relay server, when one is needed, only passes the scrambled audio and video along.</li>
+                </ul>
+              </div>
+              <div class="gz-panel" style="margin-top:12px">
+                <h3>What is encrypted</h3>
+                <p class="gz-tags"><span>Messages</span><span>Photos</span><span>Videos</span><span>Voice notes</span><span>Files</span><span>Message edits</span><span>Notification previews</span><span>Nicknames</span><span>“About” text</span><span>Profile photos</span><span>Moods</span><span>Special dates</span><span>Your start date</span><span>Game answers</span></p>
+                <h3>What is not</h3>
+                <p>To make the app work, the server can see: your Glazy IDs and display names, when messages were sent and read, message types, reaction emojis, love taps, points, garden builds and avatar outfits. It never sees what you wrote, said or shared.</p>
+              </div>
+            </div>
+          </section>
+          <section class="leaf" id="your-data" aria-label="Your data">
+            <div class="book-page">
+              <p class="chapter"><b>4</b>Your data, your control</p>
+              <div class="gz-panel">
+                <ul>
+                  <li><b>Unused spaces are deleted.</b> If neither of you opens Glazy for <b>30 days</b>, your space is permanently deleted: both accounts, every message and every file.</li>
+                  <li><b>Logging out</b> wipes Glazy’s data from that phone.</li>
+                  <li><b>No ads, no tracking, no selling.</b> Glazy has no analytics and no advertising.</li>
+                </ul>
+              </div>
+              <div class="gz-panel gz-warn" style="margin-top:12px">
+                <h3>Please remember</h3>
+                <ul>
+                  <li><b>Your PIN can’t be recovered.</b> Because only your phone can unlock your key, nobody can reset a forgotten PIN. Not even us.</li>
+                  <li><b>Keep your PIN to yourself</b>, and avoid easy ones like birthdays.</li>
+                  <li>Glazy is for people <b>18 and older</b>, two people per space.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+          <section class="leaf" id="faq" aria-label="Questions">
+            <div class="book-page">
+              <p class="chapter"><b>5</b>Questions</p>
+              <h2>Good to <span class="grad">know.</span></h2>
+              <div class="gz-faq">
+                <details><summary>Can Electrosparkzz read our chats?</summary><p>No. Chats, photos and voice notes are encrypted on your phones with a key we never have. We only store scrambled data.</p></details>
+                <details><summary>Can someone else join our space?</summary><p>No. A space is created for exactly two people at once, and nobody can be added afterwards.</p></details>
+                <details><summary>I got a new phone. What now?</summary><p>Open Glazy on the new phone, tap the kitty three times and log in with your ID and PIN. Your history is still there.</p></details>
+                <details><summary>I forgot my PIN.</summary><p>A PIN can’t be reset, because it’s what unlocks your encrypted data. If it’s lost, you’ll need to create a new space together.</p></details>
+                <details><summary>Does it cost anything?</summary><p>Glazy is free during the early preview.</p></details>
+                <details><summary>Why does it look like a timer?</summary><p>So a glance at your screen doesn’t give your private space away. It’s a real, working timer, and the secret taps only matter if you know them.</p></details>
+              </div>
+            </div>
+          </section>
+          <section class="leaf cover" id="the-end" aria-label="Back cover">
+            <div class="book-page cover-center">
+              <div class="art" aria-hidden="true">💗</div>
+              <h2>Your space is <span class="grad">waiting.</span></h2>
+              <div class="cta-row read-on">
+                <a class="btn" href="https://glazy.electrosparkzz.in" rel="noopener">Open glazy.electrosparkzz.in →</a>
+                <a class="btn" href="index.html">← Back to Electrosparkzz</a>
+              </div>
+            </div>
+          </section>
+        </main>
+        <span class="swipe-hint" data-hint>Swipe to turn the page →</span>
+      </div>
 
-      <section class="gz-section" id="what" aria-labelledby="what-title">
-        <p class="kicker">The purpose</p>
-        <h2 id="what-title">Made for couples, <span class="grad">and only couples.</span></h2>
-        <p class="gz-lead">Most apps mix your relationship in with everyone else. Glazy is one shared space for exactly two people. Nobody else can join it, see it, or read it. That includes us.</p>
-        <div class="gz-cards">
-          <article class="gz-card"><span>💬</span><h3>Chat</h3><p>Messages, photos, videos, voice notes and files, with replies, reactions, pins and read receipts.</p></article>
-          <article class="gz-card"><span>📞</span><h3>Calls</h3><p>Voice and video calls with ringtones, plus switching between phone, speaker and Bluetooth.</p></article>
-          <article class="gz-card"><span>💗</span><h3>Love taps &amp; hugs</h3><p>Send a tap when you’re thinking of them, or hold a heart together for a virtual hug.</p></article>
-          <article class="gz-card"><span>🎮</span><h3>Daily games</h3><p>A question a day, “how well do you know me”, would-you-rather, tic-tac-toe and a daily doodle.</p></article>
-          <article class="gz-card"><span>🌱</span><h3>A garden &amp; a world</h3><p>Everything you do earns love points that grow your garden, plus a small 3D island you can walk around together.</p></article>
-          <article class="gz-card"><span>🐱</span><h3>Discreet</h3><p>On your phone Glazy is called Kitty Timer, has a stopwatch icon and opens as a real timer. Only you know the secret taps that open it.</p></article>
-        </div>
-      </section>
-
-      <section class="gz-section" id="how" aria-labelledby="how-title">
-        <p class="kicker">How to use it</p>
-        <h2 id="how-title">Set up together, <span class="grad">in a minute.</span></h2>
-        <ol class="gz-steps">
-          <li><b>Open Glazy on your phone</b><span>Go to <a href="https://glazy.electrosparkzz.in">glazy.electrosparkzz.in</a>. Install it so it behaves like a normal app. On Android, tap <i>Install</i> (or ⋮ → <i>Add to Home screen</i>). On iPhone, tap <i>Share → Add to Home Screen</i>. On your home screen it shows up as <b>Kitty Timer</b> with a stopwatch icon.</span></li>
-          <li><b>Tap the kitty 5 times</b><span>Glazy opens as a Kitty Timer. Tap the kitty <b>five times quickly</b> to create your couple space.</span></li>
-          <li><b>Fill in both of you</b><span>Partner 1 enters a name, a Glazy ID (like <i>sam.k</i>) and a 6-digit PIN, then hands the phone over. Partner 2 does the same. IDs are checked as you type, so you’ll know straight away if one is taken.</span></li>
-          <li><b>Pick whose phone it is</b><span>Glazy creates your space and logs that phone in.</span></li>
-          <li><b>Log in on the other phone</b><span>Open Glazy, tap the kitty <b>three times</b>, then enter your ID and PIN.</span></li>
-          <li><b>Every time after that</b><span>Three taps on the kitty, then your PIN. If Glazy sits in the background for a while, it goes back to looking like a timer.</span></li>
-        </ol>
-        <p class="gz-note">Turn on notifications in the app to get messages and calls even when Glazy is closed. On iPhone this needs iOS 16.4 or newer, with Glazy added to the Home Screen.</p>
-      </section>
-
-      <section class="gz-section" id="privacy" aria-labelledby="privacy-title">
-        <p class="kicker">Privacy &amp; encryption</p>
-        <h2 id="privacy-title">End-to-end encrypted, <span class="grad">for real.</span></h2>
-        <p class="gz-lead">Your messages are locked on your phone before they are sent, and only your partner’s phone can unlock them. Our servers store scrambled data they cannot read.</p>
-
-        <div class="gz-grid2">
-          <article class="gz-panel">
-            <h3>How it works</h3>
-            <ul>
-              <li><b>One key per couple.</b> When you register, your phone creates a random 256-bit key just for your couple. Everything is encrypted with it using AES-256-GCM.</li>
-              <li><b>Locked with your PIN.</b> Each of you gets a copy of that key, locked with a key made from your own PIN (PBKDF2-SHA-256, 600,000 rounds). The server only ever holds these locked copies.</li>
-              <li><b>Your PIN never leaves your phone.</b> To log in, your phone sends a value derived from your PIN, not the PIN itself. The server mixes it with a secret only it knows before checking it.</li>
-              <li><b>Guessing is stopped.</b> After 5 wrong PINs, that ID is locked for 15 minutes.</li>
-              <li><b>Couples are sealed off.</b> Database rules make sure each couple can only reach its own data, live rooms and files. Even a signed-in user can’t touch another couple’s space.</li>
-              <li><b>Calls are encrypted too.</b> Calls use WebRTC (DTLS-SRTP) and go straight between your phones when possible. A relay server, when one is needed, only passes the scrambled audio and video along.</li>
-            </ul>
-          </article>
-          <article class="gz-panel">
-            <h3>What is encrypted</h3>
-            <p class="gz-tags"><span>Messages</span><span>Photos</span><span>Videos</span><span>Voice notes</span><span>Files</span><span>Message edits</span><span>Notification previews</span><span>Nicknames</span><span>“About” text</span><span>Profile photos</span><span>Moods</span><span>Special dates</span><span>Your start date</span><span>Game answers</span></p>
-            <h3>What is not</h3>
-            <p>To make the app work, the server can see: your Glazy IDs and display names, when messages were sent and read, message types, reaction emojis, love taps, points, garden builds and avatar outfits. It never sees what you wrote, said or shared.</p>
-          </article>
-        </div>
-
-        <div class="gz-grid2">
-          <article class="gz-panel">
-            <h3>Your data, your control</h3>
-            <ul>
-              <li><b>Unused spaces are deleted.</b> If neither of you opens Glazy for <b>30 days</b>, your space is permanently deleted: both accounts, every message and every file.</li>
-              <li><b>Logging out</b> wipes Glazy’s data from that phone.</li>
-              <li><b>No ads, no tracking, no selling.</b> Glazy has no analytics and no advertising.</li>
-            </ul>
-          </article>
-          <article class="gz-panel gz-warn">
-            <h3>Please remember</h3>
-            <ul>
-              <li><b>Your PIN can’t be recovered.</b> Because only your phone can unlock your key, nobody can reset a forgotten PIN. Not even us.</li>
-              <li><b>Keep your PIN to yourself</b>, and avoid easy ones like birthdays.</li>
-              <li>Glazy is for people <b>18 and older</b>, two people per space.</li>
-            </ul>
-          </article>
-        </div>
-      </section>
-
-      <section class="gz-section" id="faq" aria-labelledby="faq-title">
-        <p class="kicker">Questions</p>
-        <h2 id="faq-title">Good to <span class="grad">know.</span></h2>
-        <div class="gz-faq">
-          <details><summary>Can Electrosparkzz read our chats?</summary><p>No. Chats, photos and voice notes are encrypted on your phones with a key we never have. We only store scrambled data.</p></details>
-          <details><summary>Can someone else join our space?</summary><p>No. A space is created for exactly two people at once, and nobody can be added afterwards.</p></details>
-          <details><summary>I got a new phone. What now?</summary><p>Open Glazy on the new phone, tap the kitty three times and log in with your ID and PIN. Your history is still there.</p></details>
-          <details><summary>I forgot my PIN.</summary><p>A PIN can’t be reset, because it’s what unlocks your encrypted data. If it’s lost, you’ll need to create a new space together.</p></details>
-          <details><summary>Does it cost anything?</summary><p>Glazy is free during the early preview.</p></details>
-          <details><summary>Why does it look like a timer?</summary><p>So a glance at your screen doesn’t give your private space away. It’s a real, working timer, and the secret taps only matter if you know them.</p></details>
-        </div>
-      </section>
-
-      <section class="gz-cta">
-        <h2>Your space is <span class="grad">waiting.</span></h2>
-        <a class="btn" href="https://glazy.electrosparkzz.in" rel="noopener">Open glazy.electrosparkzz.in →</a>
-      </section>
-      </main>
-
-      <footer class="footer">
-        <span>© 2026 Electrosparkzz</span>
-        <span>made with 💖</span>
-        <a href="index.html">← electrosparkzz.in</a>
-      </footer>
+      <nav class="book-ui" aria-label="Turn pages">
+        <button type="button" data-prev aria-label="Previous page">‹</button>
+        <div class="track"><div class="bar"><span data-progress></span></div><span data-counter>1 / 10</span></div>
+        <button type="button" data-next aria-label="Next page">›</button>
+      </nav>
     </div>
+    <script src="book.js"></script>
   </body>
 </html>
