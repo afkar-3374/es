@@ -289,6 +289,9 @@ h1, h2, h3 { font-family: "Fredoka", "Nunito", sans-serif; font-weight: 600; mar
 .gz-warn { background: linear-gradient(160deg, var(--peach), #fff8f3); }
 .gz-faq { margin-top: 26px; display: grid; gap: 10px; }
 .gz-faq details { padding: 0 20px; }
+.qa { padding: 14px 18px; border-radius: 20px; background: rgba(255, 255, 255, 0.85); box-shadow: inset 0 0 0 2px #f4e6ee; }
+.qa h3 { margin: 0 0 4px; font-family: "Nunito", sans-serif; font-weight: 800; font-size: 16px; line-height: 1.35; }
+.qa p { margin: 0 !important; font-size: 15px !important; }
 .gz-faq summary { cursor: pointer; list-style: none; position: relative; padding: 17px 30px 17px 0; font-weight: 800; font-size: 16px; }
 .gz-faq summary::-webkit-details-marker { display: none; }
 .gz-faq summary::after { content: "+"; position: absolute; right: 0; top: 11px; font-family: "Fredoka", sans-serif; font-size: 26px; color: var(--rose); transition: transform 0.2s; }
@@ -484,15 +487,13 @@ html.has-book .face.back.is-cover { box-shadow: inset 0 0 0 3px rgba(255, 255, 2
 
 /* Page content */
 html.has-book .leaf { position: absolute; inset: 0; margin: 0; max-width: none; padding: 0; }
+/* Pages never scroll: the book flows extra content onto the next page */
 html.has-book .page-scroll {
   position: absolute;
   inset: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
+  overflow: hidden;
   padding: 30px 28px 54px 38px;
 }
-html.has-book .page-scroll::-webkit-scrollbar { display: none; }
 html.has-book .face.back .page-scroll { padding: 30px 38px 54px 28px; }
 html.has-book .leaf.cover .page-scroll { display: flex; flex-direction: column; }
 html.has-book .leaf.cover .page-scroll > * { margin-top: auto; margin-bottom: auto; }

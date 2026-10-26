@@ -92,13 +92,6 @@
                 <li><b>Open Glazy on your phone</b><span>Go to <a href="https://glazy.electrosparkzz.in">glazy.electrosparkzz.in</a>. Install it so it behaves like a normal app. On Android, tap <i>Install</i> (or ⋮ → <i>Add to Home screen</i>). On iPhone, tap <i>Share → Add to Home Screen</i>. On your home screen it shows up as <b>Kitty Timer</b> with a stopwatch icon.</span></li>
                 <li><b>Tap the kitty 5 times</b><span>Glazy opens as a Kitty Timer. Tap the kitty <b>five times quickly</b> to create your couple space.</span></li>
                 <li><b>Fill in both of you</b><span>Partner 1 enters a name, a Glazy ID (like <i>sam.k</i>) and a 6-digit PIN, then hands the phone over. Partner 2 does the same. IDs are checked as you type, so you’ll know straight away if one is taken.</span></li>
-              </ol>
-            </div>
-          </section>
-          <section class="leaf" id="how-2" aria-label="How to use it, continued">
-            <div class="book-page">
-              <p class="chapter"><b>2</b>How to use it, continued</p>
-              <ol class="gz-steps" start="4" style="counter-reset: step 3">
                 <li><b>Pick whose phone it is</b><span>Glazy creates your space and logs that phone in.</span></li>
                 <li><b>Log in on the other phone</b><span>Open Glazy, tap the kitty <b>three times</b>, then enter your ID and PIN.</span></li>
                 <li><b>Every time after that</b><span>Three taps on the kitty, then your PIN. If Glazy sits in the background for a while, it goes back to looking like a timer.</span></li>
@@ -116,15 +109,6 @@
                   <li><b>One key per couple.</b> When you register, your phone creates a random 256-bit key just for your couple. Everything is encrypted with it using AES-256-GCM.</li>
                   <li><b>Locked with your PIN.</b> Each of you gets a copy of that key, locked with a key made from your own PIN (PBKDF2-SHA-256, 600,000 rounds). The server only ever holds these locked copies.</li>
                   <li><b>Your PIN never leaves your phone.</b> To log in, your phone sends a value derived from your PIN, not the PIN itself. The server mixes it with a secret only it knows before checking it.</li>
-                </ul>
-              </div>
-            </div>
-          </section>
-          <section class="leaf" id="privacy-2" aria-label="More on privacy">
-            <div class="book-page">
-              <p class="chapter"><b>3</b>More on privacy</p>
-              <div class="gz-panel">
-                <ul>
                   <li><b>Guessing is stopped.</b> After 5 wrong PINs, that ID is locked for 15 minutes.</li>
                   <li><b>Couples are sealed off.</b> Database rules make sure each couple can only reach its own data, live rooms and files. Even a signed-in user can’t touch another couple’s space.</li>
                   <li><b>Calls are encrypted too.</b> Calls use WebRTC (DTLS-SRTP) and go straight between your phones when possible. A relay server, when one is needed, only passes the scrambled audio and video along.</li>
@@ -163,12 +147,12 @@
               <p class="chapter"><b>5</b>Questions</p>
               <h2>Good to <span class="grad">know.</span></h2>
               <div class="gz-faq">
-                <details><summary>Can Electrosparkzz read our chats?</summary><p>No. Chats, photos and voice notes are encrypted on your phones with a key we never have. We only store scrambled data.</p></details>
-                <details><summary>Can someone else join our space?</summary><p>No. A space is created for exactly two people at once, and nobody can be added afterwards.</p></details>
-                <details><summary>I got a new phone. What now?</summary><p>Open Glazy on the new phone, tap the kitty three times and log in with your ID and PIN. Your history is still there.</p></details>
-                <details><summary>I forgot my PIN.</summary><p>A PIN can’t be reset, because it’s what unlocks your encrypted data. If it’s lost, you’ll need to create a new space together.</p></details>
-                <details><summary>Does it cost anything?</summary><p>Glazy is free during the early preview.</p></details>
-                <details><summary>Why does it look like a timer?</summary><p>So a glance at your screen doesn’t give your private space away. It’s a real, working timer, and the secret taps only matter if you know them.</p></details>
+                <div class="qa"><h3>Can Electrosparkzz read our chats?</h3><p>No. Chats, photos and voice notes are encrypted on your phones with a key we never have. We only store scrambled data.</p></div>
+                <div class="qa"><h3>Can someone else join our space?</h3><p>No. A space is created for exactly two people at once, and nobody can be added afterwards.</p></div>
+                <div class="qa"><h3>I got a new phone. What now?</h3><p>Open Glazy on the new phone, tap the kitty three times and log in with your ID and PIN. Your history is still there.</p></div>
+                <div class="qa"><h3>I forgot my PIN.</h3><p>A PIN can’t be reset, because it’s what unlocks your encrypted data. If it’s lost, you’ll need to create a new space together.</p></div>
+                <div class="qa"><h3>Does it cost anything?</h3><p>Glazy is free during the early preview.</p></div>
+                <div class="qa"><h3>Why does it look like a timer?</h3><p>So a glance at your screen doesn’t give your private space away. It’s a real, working timer, and the secret taps only matter if you know them.</p></div>
               </div>
             </div>
           </section>

@@ -2,9 +2,11 @@
  * A real little book.
  *
  * <main data-book> holds <section class="leaf"> pages (the first and last with class
- * "cover"). On wide screens they become an open two-page spread on a desk; on phones,
- * one page at a time. Pages turn in 3D around the spine, follow your finger when you
- * swipe, and rustle as they go. Without JavaScript the pages simply stack.
+ * "cover"). The book lays them out like print: whatever doesn't fit on a page flows
+ * onto the next one, so nothing ever scrolls. On wide screens it's an open two-page
+ * spread on a desk; on phones, one page at a time. Pages turn in 3D around the spine,
+ * follow your finger when you swipe, and rustle as they go. Without JavaScript the
+ * pages simply stack.
  */
 (() => {
   const book = document.querySelector('[data-book]');
@@ -16,43 +18,30 @@
   const spreadQuery = matchMedia('(min-width: 900px) and (min-aspect-ratio: 5/4)');
   const TURN_MS = 760;
 
-  /* ── Pages ─────────────────────────────────────────────────── */
-  const pages = [...book.querySelectorAll(':scope > .leaf')];
+  // Containers that may be split across pages (between their children)
+  const SPLITTABLE = '.book-page, .section, .about-card, .cards, .gz-cards, .gz-faq, .gz-panel, .gz-grid2, .areas, .facts, .gz-steps, .toc-list, ul, ol';
+  // Never left alone at the bottom of a page: they move on with what follows
+  const KEEP_WITH_NEXT = 'h2, h3, .chapter, .kicker, .art, .planned';
 
-  // A contents page right after the front cover, built from the page titles
-  const chapters = pages.filter((p, i) => i > 0 && i < pages.length - 1 && !p.classList.contains('cover'));
-  if (chapters.length > 2 && !book.querySelector('#contents')) {
+  /* ── Source pages (kept pristine; the book is laid out from them) ── */
+  const sources = [...book.querySelectorAll(':scope > .leaf')].map((leaf) => leaf.cloneNode(true));
+
+  // A contents page right after the front cover
+  const chapters = sources.filter((s, i) => i > 0 && i < sources.length - 1 && !s.classList.contains('cover'));
+  if (chapters.length > 2 && !sources.some((s) => s.id === 'contents')) {
     const toc = document.createElement('section');
     toc.className = 'leaf toc';
     toc.id = 'contents';
     toc.setAttribute('aria-label', 'Contents');
     toc.innerHTML = '<div class="book-page"><p class="chapter">📖 Inside this book</p><h2>Contents</h2><ol class="toc-list"></ol></div>';
-    pages.splice(1, 0, toc);
-  }
-
-  // Wrap each page: scrollable content and a page number
-  pages.forEach((leaf, i) => {
-    const scroll = document.createElement('div');
-    scroll.className = 'page-scroll';
-    while (leaf.firstChild) scroll.appendChild(leaf.firstChild);
-    leaf.appendChild(scroll);
-    if (!leaf.classList.contains('cover')) {
-      const folio = document.createElement('span');
-      folio.className = 'folio';
-      folio.textContent = String(i);
-      leaf.appendChild(folio);
-    }
-  });
-
-  const tocList = pages.find((p) => p.id === 'contents')?.querySelector('.toc-list');
-  if (tocList) {
-    pages.forEach((p, i) => {
-      if (i < 2 || p.classList.contains('cover')) return;
+    const list = toc.querySelector('.toc-list');
+    chapters.forEach((s) => {
       const li = document.createElement('li');
-      li.innerHTML = `<a href="#${p.id}"><span></span><i></i><b>${i}</b></a>`;
-      li.querySelector('span').textContent = p.getAttribute('aria-label') || `Page ${i}`;
-      tocList.appendChild(li);
+      li.innerHTML = `<a href="#${s.id}" data-toc="${s.id}"><span></span><i></i><b></b></a>`;
+      li.querySelector('span').textContent = s.getAttribute('aria-label') || s.id;
+      list.appendChild(li);
     });
+    sources.splice(1, 0, toc);
   }
 
   /* ── Book frame: boards, page edges, ribbon ───────────────── */
@@ -163,12 +152,148 @@
     };
   })();
 
+  /* ── Laying out pages like print ──────────────────────────── */
+  let measureFace = null;
+
+  const fits = (scroll) => scroll.scrollHeight <= scroll.clientHeight + 1;
+  const isEmpty = (scroll) => !scroll.querySelector(':not([data-shell])');
+
+  function makePage(src, srcIndex, part) {
+    const leaf = src.cloneNode(false);
+    leaf.dataset.source = String(srcIndex);
+    leaf.dataset.part = String(part);
+    if (part > 0) {
+      leaf.id = `${src.id}~${part + 1}`;
+      leaf.classList.add('continued');
+    }
+    const scroll = document.createElement('div');
+    scroll.className = 'page-scroll';
+    leaf.appendChild(scroll);
+    return { leaf, scroll };
+  }
+
+  /** Make content that cannot be split smaller until it fits. */
+  function shrinkToFit(scroll) {
+    let zoom = 1;
+    while (!fits(scroll) && zoom > 0.6) {
+      zoom -= 0.04;
+      scroll.style.zoom = String(zoom);
+    }
+  }
+
+  /** One source page → one or more book pages. */
+  function paginate(src, srcIndex) {
+    const out = [];
+    let page = null;
+    const startPage = () => {
+      if (page) {
+        shrinkToFit(page.scroll);
+        page.leaf.remove();
+      }
+      page = makePage(src, srcIndex, out.length);
+      measureFace.appendChild(page.leaf);
+      out.push(page.leaf);
+    };
+    startPage();
+
+    if (src.classList.contains('cover') || !src.querySelector(SPLITTABLE)) {
+      [...src.childNodes].forEach((n) => page.scroll.appendChild(n.cloneNode(true)));
+      shrinkToFit(page.scroll);
+      page.leaf.remove();
+      return out;
+    }
+
+    // Containers open at the current point, outermost first
+    let stack = [];
+    let cursor = page.scroll;
+
+    // Continue on a fresh page, reopening the same containers there
+    const reopen = () => {
+      // drop containers left empty on the page we're leaving
+      for (let i = stack.length - 1; i >= 0; i--) if (!stack[i].clone.firstElementChild) stack[i].clone.remove();
+      startPage();
+      cursor = page.scroll;
+      stack = stack.map((f) => {
+        const clone = f.source.cloneNode(false);
+        clone.dataset.shell = '1';
+        if (clone.tagName === 'OL') {
+          const start = (parseInt(f.source.getAttribute('start') || '1', 10) || 1) + f.count;
+          clone.setAttribute('start', String(start));
+          clone.style.counterReset = `step ${start - 1}`;
+        }
+        cursor.appendChild(clone);
+        cursor = clone;
+        return { ...f, clone };
+      });
+    };
+
+    const counted = () => {
+      if (stack.length) stack[stack.length - 1].count++;
+    };
+
+    const place = (parent) => {
+      for (const child of [...parent.children]) {
+        const clone = child.cloneNode(true);
+        cursor.appendChild(clone);
+        if (fits(page.scroll)) {
+          counted();
+          continue;
+        }
+        clone.remove();
+
+        if (child.matches(SPLITTABLE) && child.children.length > 0) {
+          // Split this container between its children
+          const shell = child.cloneNode(false);
+          shell.dataset.shell = '1';
+          cursor.appendChild(shell);
+          stack.push({ source: child, clone: shell, count: 0 });
+          cursor = shell;
+          place(child);
+          stack.pop();
+          cursor = stack.length ? stack[stack.length - 1].clone : page.scroll;
+          counted();
+          continue;
+        }
+
+        if (isEmpty(page.scroll)) {
+          // Too big for any page: keep it here; the page shrinks to fit
+          cursor.appendChild(clone);
+          counted();
+          continue;
+        }
+
+        // Headings travel with what follows them
+        const carry = [];
+        while (cursor.lastElementChild && cursor.lastElementChild.matches(KEEP_WITH_NEXT)) {
+          carry.unshift(cursor.lastElementChild);
+          cursor.lastElementChild.remove();
+        }
+        if (carry.length && isEmpty(page.scroll)) {
+          carry.forEach((el) => cursor.appendChild(el));
+          carry.length = 0;
+        }
+        reopen();
+        carry.forEach((el) => cursor.appendChild(el));
+        cursor.appendChild(clone);
+        counted();
+      }
+    };
+
+    place(src);
+    shrinkToFit(page.scroll);
+    page.leaf.remove();
+    return out;
+  }
+
   /* ── Sheets: two pages per sheet (spread) or one (phone) ──── */
   let mode = '';
+  let pages = [];
   let sheets = [];
   let turned = 0;
   let busy = false;
-  let pageIndex = indexOfHash(location.hash);
+  let pageIndex = 0;
+  let wanted = location.hash; // where to open the book
+  let laidOutFor = '';
 
   const blank = () => {
     const el = document.createElement('section');
@@ -177,14 +302,49 @@
     return el;
   };
 
-  function build() {
+  function build(force = false) {
     const nextMode = spreadQuery.matches ? 'spread' : 'single';
-    if (nextMode === mode) return;
-    mode = nextMode;
-    root.dataset.bookMode = mode;
-    sheetsHolder.textContent = '';
-    sheets = [];
+    root.dataset.bookMode = nextMode;
+    const size = `${nextMode}:${Math.round(book.clientWidth)}x${Math.round(book.clientHeight)}`;
+    if (!force && size === laidOutFor) return;
 
+    // Remember where the reader is (source page + part), to land there again
+    const here = pages[pageIndex];
+    const keep = here ? { source: here.dataset.source, part: Number(here.dataset.part) } : null;
+
+    mode = nextMode;
+    sheetsHolder.textContent = '';
+    laidOutFor = size;
+
+    // A hidden sheet the size of a real page, to measure against
+    const probe = document.createElement('div');
+    probe.className = 'sheet measuring';
+    probe.style.visibility = 'hidden';
+    measureFace = document.createElement('div');
+    measureFace.className = 'face front';
+    probe.appendChild(measureFace);
+    sheetsHolder.appendChild(probe);
+
+    pages = sources.flatMap((src, i) => paginate(src, i));
+    probe.remove();
+
+    // Page numbers and the contents page
+    pages.forEach((leaf, i) => {
+      if (leaf.classList.contains('cover')) return;
+      const folio = document.createElement('span');
+      folio.className = 'folio';
+      folio.textContent = String(i);
+      leaf.appendChild(folio);
+    });
+    pages.forEach((leaf) => {
+      leaf.querySelectorAll('[data-toc]').forEach((a) => {
+        const at = pages.findIndex((p) => p.id === a.dataset.toc);
+        a.querySelector('b').textContent = at > 0 ? String(at) : '';
+      });
+    });
+
+    // Sheets
+    sheets = [];
     const faces = [];
     if (mode === 'spread') {
       // The back cover has to land on the back of the last sheet (the left side)
@@ -194,7 +354,6 @@
     } else {
       pages.forEach((p) => faces.push([p, null]));
     }
-
     faces.forEach(([front, back]) => {
       const sheet = document.createElement('div');
       sheet.className = 'sheet';
@@ -213,7 +372,17 @@
       sheets.push(sheet);
     });
 
-    turned = turnedForPage(pageIndex);
+    // Back to the same place
+    let target = 0;
+    if (keep) {
+      const same = pages.filter((p) => p.dataset.source === keep.source);
+      const match = same.find((p) => Number(p.dataset.part) === keep.part) ?? same[same.length - 1];
+      target = Math.max(pages.indexOf(match), 0);
+    } else if (wanted) {
+      target = indexOfHash(wanted);
+      wanted = '';
+    }
+    turned = turnedForPage(target);
     layout(false);
   }
 
@@ -366,7 +535,6 @@
     await animateSheet(sheet, start, end, ms);
     turned = target;
     layout();
-    visiblePages().forEach((p) => p.querySelector('.page-scroll')?.scrollTo({ top: 0 }));
     busy = false;
   }
 
@@ -377,8 +545,8 @@
   prevBtn?.addEventListener('click', prev);
   nextBtn?.addEventListener('click', next);
   const contentsBtn = document.querySelector('[data-contents]');
-  if (contentsBtn && !pages.some((p) => p.id === 'contents')) contentsBtn.hidden = true;
-  document.querySelector('[data-contents]')?.addEventListener('click', () => {
+  if (contentsBtn && !sources.some((s) => s.id === 'contents')) contentsBtn.hidden = true;
+  contentsBtn?.addEventListener('click', () => {
     const i = pages.findIndex((p) => p.id === 'contents');
     goToPage(i >= 0 ? i : 0);
   });
@@ -434,7 +602,7 @@
     const dy = e.clientY - drag.y;
     if (!drag.active) {
       if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.2) {
-        if (Math.abs(dy) > 14) drag = null; // vertical: let the page scroll
+        if (Math.abs(dy) > 14) drag = null;
         return;
       }
       const dir = dx < 0 ? 1 : -1;
@@ -504,13 +672,29 @@
   });
 
   window.addEventListener('hashchange', () => goToPage(indexOfHash(location.hash)));
-  spreadQuery.addEventListener('change', () => {
-    const keep = pageIndex;
-    mode = '';
-    pageIndex = keep;
-    build();
-  });
 
-  build();
-  requestAnimationFrame(() => root.classList.add('book-ready'));
+  // Lay the book out again when the page size really changes (rotation, resize)
+  let ready = false;
+  let resizeTimer = 0;
+  const relayout = () => {
+    if (!ready) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (busy || drag) return relayout();
+      build();
+    }, 250);
+  };
+  spreadQuery.addEventListener('change', relayout);
+  new ResizeObserver(relayout).observe(book);
+
+  // Measure with the real fonts
+  root.dataset.bookMode = spreadQuery.matches ? 'spread' : 'single';
+  const fontsReady = document.fonts?.ready ?? Promise.resolve();
+  Promise.race([fontsReady, new Promise((r) => setTimeout(r, 1500))]).then(() => {
+    build(true);
+    ready = true;
+    root.classList.add('book-ready');
+    // Fonts that arrive late change the text size: lay out again so nothing is cut off
+    if (document.fonts?.status !== 'loaded') fontsReady.then(() => build(true));
+  });
 })();
