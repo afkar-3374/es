@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react';
 import { input } from '../player/input';
+import { requestUse } from '../world/interact';
 
 /**
  * Phone controls: a joystick on the left to walk, drag anywhere on the right to look.
  */
 export function TouchControls() {
   const stick = useRef<{ id: number; x: number; y: number } | null>(null);
-  const look = useRef<{ id: number; x: number; y: number } | null>(null);
+  const look = useRef<{ id: number; x: number; y: number; sx: number; sy: number; t: number } | null>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0, active: false });
   const RANGE = 48;
 
@@ -17,7 +18,7 @@ export function TouchControls() {
         stick.current = { id: t.identifier, x: t.clientX, y: t.clientY };
         setKnob({ x: 0, y: 0, active: true });
       } else if (!look.current) {
-        look.current = { id: t.identifier, x: t.clientX, y: t.clientY };
+        look.current = { id: t.identifier, x: t.clientX, y: t.clientY, sx: t.clientX, sy: t.clientY, t: performance.now() };
       }
     }
   };
@@ -50,7 +51,14 @@ export function TouchControls() {
         input.joystick.y = 0;
         setKnob({ x: 0, y: 0, active: false });
       }
-      if (look.current?.id === t.identifier) look.current = null;
+      if (look.current?.id === t.identifier) {
+        // a quick tap without dragging uses whatever is under the finger
+        const l = look.current;
+        if (Math.hypot(t.clientX - l.sx, t.clientY - l.sy) < 12 && performance.now() - l.t < 350) {
+          requestUse((t.clientX / window.innerWidth) * 2 - 1, -(t.clientY / window.innerHeight) * 2 + 1);
+        }
+        look.current = null;
+      }
     }
   };
 
@@ -59,7 +67,7 @@ export function TouchControls() {
       <div className={`stick${knob.active ? ' on' : ''}`}>
         <div className="knob" style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
       </div>
-      <p className="look-hint">Drag here to look around</p>
+      <p className="look-hint">Drag to look · tap things</p>
     </div>
   );
 }

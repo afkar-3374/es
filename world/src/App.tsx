@@ -8,11 +8,15 @@ import { Rain } from './world/Rain';
 import { Street } from './world/Street';
 import { Neighbours } from './world/Neighbours';
 import { Building } from './world/Building';
+import { Interior } from './world/Interior';
+import { Interactor } from './world/Interactor';
+import { requestUse } from './world/interact';
 import { Palms, type PalmSpot } from './world/Palms';
 import { Player } from './player/Player';
 import { Hud } from './ui/Hud';
 import { Intro } from './ui/Intro';
 import { TouchControls } from './ui/TouchControls';
+import { Overlay } from './ui/Overlay';
 import { isTouch } from './player/input';
 
 /** Lock the mouse to the world for looking around (browsers may refuse; that's fine). */
@@ -29,6 +33,9 @@ function lockPointer() {
 const cam = new URLSearchParams(location.search).get('cam')?.split(',').map(Number);
 const START: [number, number, number] = cam && cam.length >= 2 ? [cam[0], 1.2, cam[1]] : [0, 1.2, 16.5];
 const START_YAW = cam && cam.length >= 3 ? cam[2] : 0;
+
+// For previews: ?debug exposes a way to press "use" from the console
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esUse: requestUse });
 
 // Coconut palms along both footpaths (not in front of the entrance)
 const PALMS: PalmSpot[] = [
@@ -57,7 +64,10 @@ export default function App() {
           gl.toneMappingExposure = 0.95;
         }}
         onClick={() => {
-          if (entered && !isTouch && !document.pointerLockElement) lockPointer();
+          if (!entered || isTouch) return;
+          // first click locks the mouse; after that a click uses what's under the crosshair
+          if (!document.pointerLockElement) lockPointer();
+          else requestUse(0, 0);
         }}
       >
         <Suspense fallback={null}>
@@ -66,15 +76,18 @@ export default function App() {
             <Street />
             <Neighbours />
             <Building />
+            <Interior />
             <Player start={START} startYaw={START_YAW} />
           </Physics>
           <Palms spots={PALMS} />
+          <Interactor />
           <Rain intensity={c.weather.rain > 0.05 ? Math.min(0.25 + c.weather.rain / 5, 1) : 0} wind={c.weather.wind} />
         </Suspense>
       </Canvas>
 
       {entered && <Hud c={c} />}
       {entered && isTouch && <TouchControls />}
+      {entered && <Overlay />}
       {!entered && <Intro c={c} onEnter={enter} />}
     </>
   );

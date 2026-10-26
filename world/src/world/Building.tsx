@@ -28,7 +28,7 @@ export function Building() {
   const plaster = usePBR('painted_plaster_wall', [4, 2], { tint: '#f4ede3', normalScale: 0.5 });
   const plasterSide = usePBR('painted_plaster_wall', [7, 3], { tint: '#efe6da', normalScale: 0.5 });
   const terrazzo = usePBR('terrazzo_tiles', [8, 7]);
-  const innerWall = usePBR('grey_plaster', [6, 2], { tint: '#f6f2ec' });
+  const innerWall = usePBR('painted_plaster_wall', [6, 2], { tint: '#f7f3ee', normalScale: 0.35 });
   const concrete = usePBR('concrete', [8, 1]);
   const glass = useMemo(glassMaterial, []);
   const acp = useMemo(() => new THREE.MeshStandardMaterial({ color: '#25212e', roughness: 0.35, metalness: 0.6 }), []);
@@ -69,7 +69,7 @@ export function Building() {
       <mesh position={[0, PLINTH + 0.01, -D / 2]} rotation-x={-Math.PI / 2} receiveShadow material={terrazzo}>
         <planeGeometry args={[W - WALL * 2, D - WALL * 2]} />
       </mesh>
-      <mesh position={[0, GF_TOP, -D / 2]} rotation-x={Math.PI / 2} material={ceiling}>
+      <mesh position={[0, GF_TOP - 0.01, -D / 2]} rotation-x={Math.PI / 2} material={ceiling}>
         <planeGeometry args={[W - WALL * 2, D - WALL * 2]} />
       </mesh>
       <mesh position={[0, GF_TOP + 0.15, -D / 2]} castShadow receiveShadow material={concrete}>
@@ -78,7 +78,7 @@ export function Building() {
       {/* Ceiling light panels in the lobby */}
       {[-6, 0, 6].flatMap((x) =>
         [-4, -11, -17].map((z) => (
-          <mesh key={`${x}${z}`} position={[x, GF_TOP - 0.02, z]} rotation-x={Math.PI / 2} material={panelLight}>
+          <mesh key={`${x}${z}`} position={[x, GF_TOP - 0.03, z]} rotation-x={Math.PI / 2} material={panelLight}>
             <planeGeometry args={[1.2, 1.2]} />
           </mesh>
         ))
