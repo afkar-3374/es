@@ -92,6 +92,8 @@ export function Player({ start = [0, 1.2, 16.5] as [number, number, number], sta
         yaw.current = world.seat.yaw;
         pitch.current = -0.05;
       }
+      world.heading = yaw.current;
+      world.avatar.set(world.seat.eye.x, world.seat.eye.y - 1.64, world.seat.eye.z);
       if (Math.hypot(f, r) > 0.3 || world.standRequest) {
         world.standRequest = false;
         const s = world.seat.standAt;
@@ -126,6 +128,8 @@ export function Player({ start = [0, 1.2, 16.5] as [number, number, number], sta
     // share where you are; indoors means no rain on you
     world.player.set(next.x, next.y - HALF_HEIGHT - RADIUS, next.z);
     world.indoors = insideBuilding(next.x, next.z, -0.2);
+    world.heading = yaw.current;
+    world.avatar.copy(world.player);
 
     // camera at eye height with a soft walking bob
     bob.current += speedNow.current * dt * 5.2;

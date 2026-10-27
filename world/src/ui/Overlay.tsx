@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ui, useUi } from '../world/interact';
-import { isTouch } from '../player/input';
+import { isTouch, typing } from '../player/input';
 import { music } from '../audio/music';
 import { standUp } from '../world/seats';
 import { ride } from '../world/ride';
@@ -25,7 +25,7 @@ export function Overlay() {
   // Keys: Q sip · R read the book you carry · E get off / stand up · H horn
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (ui.get().card || ui.get().book) return;
+      if (ui.get().card || ui.get().book || typing(e)) return;
       if (e.code === 'KeyQ') ui.sip();
       if (e.code === 'KeyR' && ui.get().carrying) ui.readCarried();
       if (e.code === 'KeyE') {

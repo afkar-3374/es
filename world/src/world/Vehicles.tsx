@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { CuboidCollider, RigidBody, useRapier, type RapierRigidBody } from '@react-three/rapier';
 import type { Collider, KinematicCharacterController } from '@dimforge/rapier3d-compat';
@@ -7,43 +7,57 @@ import { SPECS, setVehicleLights, VehicleModel, type VehicleKind } from './vehic
 import { applyPose, instancePerson, SEATED, usePersonSource } from './people';
 import { ui, type Interactable } from './interact';
 import { world } from './state';
+import { junctions, roadById } from './layout';
+import { me, peers } from '../net/net';
+import { isTouch } from '../player/input';
 import { input } from '../player/input';
 import { ride } from './ride';
 import { engine, horn } from '../audio/sfx';
 import type { Conditions } from '../env/kasaragod';
 
 /*
- * Traffic on the street (keeping left, as in India) and vehicles you can ride.
- * The road runs along x between z = 5 and z = 15; eastbound (+x) traffic uses the
- * north half (z 5–10), westbound the south half (z 10–15).
+ * Traffic around town (keeping left, as in India) and the vehicle each visitor can
+ * call up and ride. Every road runs along x or z; on an east–west road eastbound (+x)
+ * traffic keeps to the north half, on a north–south road southbound (+z) traffic keeps
+ * to the east half.
  */
-const ROUTE = 190; // vehicles loop between −ROUTE and +ROUTE
 const CROSSING = { x0: -2.6, x1: 2.6, z0: 4.6, z1: 15.4 };
-const ON_ROAD = (z: number) => z > 5 && z < 15;
 
 /* ── Which vehicles are on the road (more at rush hour, few at night) ── */
 
 interface Npc {
   kind: VehicleKind;
   color: string;
+  road: string;
   dir: 1 | -1;
-  lane: number; // z
+  /** distance of the lane from the road's centre line (always on the left) */
+  off: number;
   cruise: number; // m/s
-  start: number; // starting x
+  start: number; // starting position along the road
   order: number; // lower = still out at quiet times
 }
 
 const NPCS: Npc[] = [
-  { kind: 'car', color: '#c0392b', dir: 1, lane: 7.3, cruise: 9.5, start: -150, order: 0 },
-  { kind: 'auto', color: '', dir: -1, lane: 12.7, cruise: 7, start: 120, order: 1 },
-  { kind: 'scooter', color: '#2d6cdf', dir: 1, lane: 6.2, cruise: 8, start: -40, order: 2 },
-  { kind: 'car', color: '#ecf0f1', dir: -1, lane: 12.6, cruise: 10, start: -20, order: 3 },
-  { kind: 'auto', color: '', dir: 1, lane: 7.2, cruise: 7, start: 60, order: 4 },
-  { kind: 'scooter', color: '#e84393', dir: -1, lane: 13.8, cruise: 8.5, start: 160, order: 5 },
-  { kind: 'cycle', color: '#16a085', dir: 1, lane: 5.9, cruise: 4, start: 20, order: 6 },
-  { kind: 'car', color: '#34495e', dir: 1, lane: 7.3, cruise: 9, start: 130, order: 7 },
-  { kind: 'scooter', color: '#f39c12', dir: -1, lane: 13.7, cruise: 7.5, start: 40, order: 8 },
-  { kind: 'car', color: '#7f8c8d', dir: -1, lane: 12.6, cruise: 10.5, start: -110, order: 9 },
+  { kind: 'car', color: '#c0392b', road: 'main', dir: 1, off: 2.7, cruise: 9.5, start: -150, order: 0 },
+  { kind: 'auto', color: '', road: 'main', dir: -1, off: 2.7, cruise: 7, start: 120, order: 1 },
+  { kind: 'scooter', color: '#2d6cdf', road: 'main', dir: 1, off: 3.8, cruise: 8, start: -40, order: 2 },
+  { kind: 'car', color: '#ecf0f1', road: 'main', dir: -1, off: 2.6, cruise: 10, start: -20, order: 3 },
+  { kind: 'auto', color: '', road: 'main', dir: 1, off: 2.8, cruise: 7, start: 60, order: 4 },
+  { kind: 'scooter', color: '#e84393', road: 'main', dir: -1, off: 3.8, cruise: 8.5, start: 160, order: 5 },
+  { kind: 'cycle', color: '#16a085', road: 'main', dir: 1, off: 4.1, cruise: 4, start: 20, order: 6 },
+  { kind: 'car', color: '#34495e', road: 'main', dir: 1, off: 2.7, cruise: 9, start: 130, order: 7 },
+  { kind: 'scooter', color: '#f39c12', road: 'main', dir: -1, off: 3.7, cruise: 7.5, start: 40, order: 8 },
+  { kind: 'car', color: '#7f8c8d', road: 'main', dir: -1, off: 2.6, cruise: 10.5, start: -110, order: 9 },
+  // around town
+  { kind: 'auto', color: '', road: 'coast', dir: 1, off: 2.2, cruise: 7.5, start: -120, order: 1 },
+  { kind: 'car', color: '#1f6f8b', road: 'coast', dir: -1, off: 2.2, cruise: 10, start: 150, order: 3 },
+  { kind: 'scooter', color: '#8e44ad', road: 'coast', dir: 1, off: 3.2, cruise: 8, start: 60, order: 5 },
+  { kind: 'scooter', color: '#d35400', road: 'west', dir: 1, off: 2, cruise: 7.5, start: -60, order: 2 },
+  { kind: 'auto', color: '', road: 'west', dir: -1, off: 2, cruise: 6.5, start: 80, order: 6 },
+  { kind: 'car', color: '#f1c40f', road: 'east', dir: -1, off: 2, cruise: 8.5, start: 40, order: 2 },
+  { kind: 'cycle', color: '#c0392b', road: 'east', dir: 1, off: 3, cruise: 4, start: -40, order: 7 },
+  { kind: 'car', color: '#95a5a6', road: 'north', dir: 1, off: 2, cruise: 9, start: -100, order: 4 },
+  { kind: 'scooter', color: '#27ae60', road: 'south', dir: -1, off: 2, cruise: 8, start: 50, order: 4 },
 ];
 
 /** Share of the traffic out right now, by the hour in Kasaragod. */
@@ -53,41 +67,58 @@ function busyness(c: Conditions) {
   return curve[h] ?? 0.6;
 }
 
-/* ── Rideable vehicles parked in front of the building ─────────── */
+/** Colours for visitors' own vehicles */
+const PAINT = ['#e84393', '#2d6cdf', '#16a085', '#f39c12', '#c0392b', '#8e44ad', '#f5f6fa', '#2c3e50', '#d35400', '#27ae60'];
 
-interface ParkedSpec {
-  id: string;
-  kind: VehicleKind;
-  color: string;
-  home: [number, number, number];
-  yaw: number;
-}
-const PARKED: ParkedSpec[] = [
-  // two-wheelers parked at an angle, front towards the road
-  { id: 'scooter', kind: 'scooter', color: '#e84393', home: [4.2, 0.16, 3.2], yaw: -0.55 },
-  { id: 'cycle', kind: 'cycle', color: '#2d6cdf', home: [7.6, 0.16, 3.3], yaw: -0.55 },
-  { id: 'auto', kind: 'auto', color: '', home: [11.6, 0.16, 2.7], yaw: 0 },
-  { id: 'car', kind: 'car', color: '#f5f6fa', home: [-9.6, 0.16, 2.6], yaw: 0 },
-];
-
-/** Live positions of everything on wheels, for keeping distance. */
+/** Live positions of everything on wheels and everyone walking on a road, for keeping distance. */
 const live = {
-  npcs: [] as { x: number; z: number; dir: number }[],
-  rides: [] as { x: number; z: number; speed: number; ridden: boolean }[],
+  npcs: [] as { x: number; z: number; road: string }[],
 };
+
+/** Things a driver must not hit: you, other visitors and their vehicles. */
+function obstacles(): { x: number; z: number; parked: boolean; walker: boolean }[] {
+  const list: { x: number; z: number; parked: boolean; walker: boolean }[] = [];
+  const p = world.player;
+  if (p.y < 1.2 && !world.riding) list.push({ x: p.x, z: p.z, parked: false, walker: true });
+  const v = world.vehicle;
+  if (v) list.push({ x: v.x, z: v.z, parked: Math.abs(v.speed) < 0.1 && !v.ridden, walker: false });
+  for (const peer of peers.values()) {
+    if (peer.mode === 0 && peer.y < 1.2) list.push({ x: peer.x, z: peer.z, parked: false, walker: true });
+    const pv = peer.vehicle;
+    if (pv) list.push({ x: pv.x, z: pv.z, parked: Math.abs(pv.speed) < 0.1 && !pv.ridden, walker: false });
+  }
+  return list;
+}
 
 export function Vehicles({ c }: { c: Conditions }) {
   const share = busyness(c);
-  const active = Math.max(1, Math.round(NPCS.length * share));
   useFrame(() => setVehicleLights(world.night));
+  const [mine, setMine] = useState<{ kind: VehicleKind; color: string; at: [number, number, number]; yaw: number; n: number } | null>(null);
+  const { world: physics, rapier } = useRapier();
+
+  // calling your vehicle: it appears just in front of you, side-on
+  useEffect(() => {
+    ride.call = (kind) => {
+      if (ui.get().riding) return ui.toast('Get off first, then call another vehicle.');
+      const p = world.player;
+      const h = world.heading;
+      const fwd = { x: -Math.sin(h), y: 0, z: -Math.cos(h) };
+      let d = 3.2;
+      const hit = physics.castRay(new rapier.Ray({ x: p.x, y: p.y + 0.6, z: p.z }, fwd), 5, true, undefined, undefined, undefined, undefined, (col) => col.parent()?.bodyType() === rapier.RigidBodyType.Fixed);
+      if (hit) d = Math.min(d, hit.timeOfImpact - 1.4);
+      if (d < 1.2) return ui.toast('No room here. Step back from the wall and try again.');
+      const hash = [...me.id].reduce((a, ch) => a + ch.charCodeAt(0), 0);
+      setMine((m) => ({ kind, color: PAINT[hash % PAINT.length], at: [p.x + fwd.x * d, Math.max(p.y, 0), p.z + fwd.z * d], yaw: h, n: (m?.n ?? 0) + 1 }));
+      ui.toast(`Your ${SPECS[kind].name.toLowerCase()} is here! ${SPECS[kind].emoji} Walk up and ${isTouch ? 'tap' : 'click'} it to ride.`);
+    };
+  }, [physics, rapier]);
+
   return (
     <group>
       {NPCS.map((n, i) => (
-        <TrafficVehicle key={i} index={i} npc={n} on={n.order < active} />
+        <TrafficVehicle key={i} index={i} npc={n} on={n.order < Math.max(1, Math.round(10 * share))} />
       ))}
-      {PARKED.map((p, i) => (
-        <Rideable key={p.id} index={i} spec={p} />
-      ))}
+      {mine && <MyVehicle key={mine.n} kind={mine.kind} color={mine.color} home={mine.at} yaw={mine.yaw} />}
     </group>
   );
 }
@@ -98,10 +129,17 @@ function TrafficVehicle({ index, npc, on }: { index: number; npc: Npc; on: boole
   const group = useRef<THREE.Group>(null);
   const body = useRef<RapierRigidBody>(null);
   const spec = SPECS[npc.kind];
-  const state = useRef({ x: npc.start, speed: npc.cruise, offset: 0, blocked: 0, honked: 0 });
+  const road = roadById(npc.road);
+  const alongX = road.axis === 'x';
+  // keep left: see the note at the top
+  const laneC = road.c + (alongX ? -npc.dir : npc.dir) * npc.off;
+  const yaw = alongX ? (npc.dir === 1 ? 0 : Math.PI) : npc.dir === 1 ? -Math.PI / 2 : Math.PI / 2;
+  const ends = [road.from + 6, road.to - 6];
+  const crossings = useMemo(() => junctions(road).filter((j) => j.at > ends[0] && j.at < ends[1]), [road]);
+  const state = useRef({ s: npc.start, speed: npc.cruise, offset: 0, blocked: 0, honked: 0 });
   const wheels = useRef<{ o: THREE.Object3D; r: number }[]>([]);
   const riderRef = useRef<THREE.Object3D>(null);
-  const yaw = npc.dir === 1 ? 0 : Math.PI;
+  const rot = useMemo(() => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), [yaw]);
 
   useEffect(() => {
     wheels.current = [];
@@ -112,66 +150,83 @@ function TrafficVehicle({ index, npc, on }: { index: number; npc: Npc; on: boole
     const dt = Math.min(rawDt, 0.05);
     const g = group.current;
     if (!g) return;
-    const s = state.current;
+    const st = state.current;
     g.visible = on;
     if (!on) {
       body.current?.setNextKinematicTranslation({ x: 0, y: -60 - index * 5, z: 0 });
-      live.npcs[index] = { x: 9999, z: -999, dir: npc.dir };
+      live.npcs[index] = { x: 9999, z: 9999, road: npc.road };
       return;
     }
 
-    // what's ahead in this lane? (people, other vehicles, the crossing)
-    const laneZ = npc.lane + s.offset;
+    // what's ahead in this lane? (people, vehicles, the crossing, a junction to give way at)
+    const lane = laneC + (alongX ? -npc.dir : npc.dir) * st.offset;
     let gap = Infinity;
     let parkedAhead = false; // the nearest thing ahead is a vehicle someone left on the road
     const ahead = (x: number, z: number, width = 1.7, parked = false) => {
-      if (Math.abs(z - laneZ) > width) return;
-      const d = (x - s.x) * npc.dir;
+      const a = alongX ? x : z;
+      const across = alongX ? z : x;
+      if (Math.abs(across - lane) > width) return;
+      const d = (a - st.s) * npc.dir;
       if (d > 0 && d < gap) {
         gap = d;
         parkedAhead = parked;
       }
     };
+    const onThisRoad = (x: number, z: number) => Math.abs((alongX ? z : x) - road.c) < road.w / 2;
+    for (const o of obstacles()) if (!o.walker || onThisRoad(o.x, o.z)) ahead(o.x, o.z, o.walker ? 1.9 : 1.7, o.parked);
     const p = world.player;
-    if (p.y < 1.2 && ON_ROAD(p.z)) ahead(p.x, p.z, 1.9);
     // someone on or about to step onto the zebra crossing: stop before it
-    const atCrossing = p.y < 1.2 && p.x > CROSSING.x0 && p.x < CROSSING.x1 && p.z > CROSSING.z0 && p.z < CROSSING.z1;
-    if (atCrossing) {
+    if (npc.road === 'main' && p.y < 1.2 && p.x > CROSSING.x0 && p.x < CROSSING.x1 && p.z > CROSSING.z0 && p.z < CROSSING.z1) {
       const stopLine = npc.dir === 1 ? CROSSING.x0 - 1.5 : CROSSING.x1 + 1.5;
-      const d = (stopLine - s.x) * npc.dir;
+      const d = (stopLine - st.s) * npc.dir;
       if (d > -spec.half[0] && d < gap) gap = d + 3.5;
     }
-    live.npcs.forEach((o, j) => j !== index && o.dir === npc.dir && ahead(o.x, o.z));
-    live.rides.forEach((r) => ahead(r.x, r.z, 1.7, Math.abs(r.speed) < 0.1 && !r.ridden));
+    live.npcs.forEach((o, j) => j !== index && ahead(o.x, o.z));
+    // side roads give way to the main street
+    if (npc.road !== 'main') {
+      for (const j of crossings) {
+        const stopAt = j.at - npc.dir * (j.half + spec.half[0] + 1.5);
+        const d = (stopAt - st.s) * npc.dir;
+        if (d < -0.5 || d > 25) continue;
+        const busy = live.npcs.some((o) => {
+          const other = roadById(o.road);
+          if (other.axis === road.axis || Math.abs(other.c - j.at) > 1) return false;
+          return Math.abs((other.axis === 'x' ? o.x : o.z) - road.c) < 22;
+        });
+        if (busy && d + 3.5 < gap) gap = d + 3.5;
+      }
+    }
 
     const safe = gap - spec.half[0] * 2 - 2.5;
     const want = Math.max(0, Math.min(npc.cruise, safe * 0.9));
-    const rate = want < s.speed ? 6 : 2;
-    s.speed += (want - s.speed) * Math.min(rate * dt, 1);
-    if (s.speed < 0.05 && safe < 2) s.blocked += dt;
-    else s.blocked = Math.max(0, s.blocked - dt * 2);
+    const rate = want < st.speed ? 6 : 2;
+    st.speed += (want - st.speed) * Math.min(rate * dt, 1);
+    if (st.speed < 0.05 && safe < 2) st.blocked += dt;
+    else st.blocked = Math.max(0, st.blocked - dt * 2);
 
+    const x = alongX ? st.s : lane;
+    const z = alongX ? lane : st.s;
     // stuck behind something for a while: honk, then edge round it
-    if (s.blocked > 2.5 && performance.now() - s.honked > 6000) {
-      s.honked = performance.now();
-      const dist = Math.hypot(p.x - s.x, p.z - laneZ);
-      horn(npc.kind, Math.max(0, 1 - dist / 45));
+    if (st.blocked > 2.5 && performance.now() - st.honked > 6000) {
+      st.honked = performance.now();
+      horn(npc.kind, Math.max(0, 1 - Math.hypot(p.x - x, p.z - z) / 45));
     }
-    const targetOffset = s.blocked > 5 && parkedAhead ? -npc.dir * 1.9 : s.blocked > 0.5 ? s.offset : 0;
-    s.offset += (targetOffset - s.offset) * Math.min(dt * 0.6, 1);
+    const targetOffset = st.blocked > 5 && parkedAhead ? -1.9 : st.blocked > 0.5 ? st.offset : 0;
+    st.offset += (targetOffset - st.offset) * Math.min(dt * 0.6, 1);
 
-    s.x += s.speed * npc.dir * dt;
-    if (s.x * npc.dir > ROUTE) s.x = -ROUTE * npc.dir;
-    live.npcs[index] = { x: s.x, z: laneZ, dir: npc.dir };
+    st.s += st.speed * npc.dir * dt;
+    if (npc.dir === 1 ? st.s > ends[1] : st.s < ends[0]) st.s = npc.dir === 1 ? ends[0] : ends[1];
+    live.npcs[index] = { x, z, road: npc.road };
 
-    g.position.set(s.x, 0, laneZ);
+    g.position.set(x, 0, z);
     g.rotation.y = yaw;
-    // far down the street it's too small to see: skip drawing it
-    const far = Math.abs(s.x - p.x);
-    g.visible = far < 130;
+    // far away it's too small to see (or hidden in the fog): skip drawing it
+    const far = Math.hypot(x - p.x, z - p.z);
+    g.visible = far < 140;
     if (riderRef.current) riderRef.current.visible = far < 55;
-    for (const w of wheels.current) w.o.rotation.z -= (s.speed * dt) / w.r;
-    body.current?.setNextKinematicTranslation({ x: s.x, y: spec.half[1], z: laneZ });
+    for (const w of wheels.current) w.o.rotation.z -= (st.speed * dt) / w.r;
+    body.current?.setNextKinematicTranslation({ x, y: spec.half[1], z });
+    body.current?.setNextKinematicRotation(rot);
   });
 
   return (
@@ -184,7 +239,7 @@ function TrafficVehicle({ index, npc, on }: { index: number; npc: Npc; on: boole
           </group>
         )}
       </group>
-      <RigidBody ref={body} type="kinematicPosition" colliders={false} position={[npc.start, spec.half[1], npc.lane]} rotation={[0, yaw, 0]}>
+      <RigidBody ref={body} type="kinematicPosition" colliders={false} position={[0, -60 - index * 5, 0]} rotation={[0, yaw, 0]}>
         <CuboidCollider args={spec.half} />
       </RigidBody>
     </>
@@ -192,7 +247,7 @@ function TrafficVehicle({ index, npc, on }: { index: number; npc: Npc; on: boole
 }
 
 /** A person riding a two-wheeler or driving an auto. */
-function Rider({ kind }: { kind: VehicleKind }) {
+export function Rider({ kind }: { kind: VehicleKind }) {
   const source = usePersonSource('rider');
   const model = useMemo(() => {
     const { model, bones } = instancePerson(source);
@@ -212,8 +267,8 @@ function Rider({ kind }: { kind: VehicleKind }) {
 
 /* ── Vehicles you can ride ──────────────────────────────────── */
 
-function Rideable({ index, spec: p }: { index: number; spec: ParkedSpec }) {
-  const spec = SPECS[p.kind];
+function MyVehicle({ kind, color, home, yaw }: { kind: VehicleKind; color: string; home: [number, number, number]; yaw: number }) {
+  const spec = SPECS[kind];
   const group = useRef<THREE.Group>(null);
   const body = useRef<RapierRigidBody>(null);
   const collider = useRef<Collider | null>(null);
@@ -221,8 +276,8 @@ function Rideable({ index, spec: p }: { index: number; spec: ParkedSpec }) {
   const { world: physics } = useRapier();
   const { camera } = useThree();
   const st = useRef({
-    pos: new THREE.Vector3(...p.home),
-    yaw: p.yaw,
+    pos: new THREE.Vector3(...home),
+    yaw,
     speed: 0,
     fall: 0,
     riding: false,
@@ -241,7 +296,10 @@ function Rideable({ index, spec: p }: { index: number; spec: ParkedSpec }) {
     c.setMaxSlopeClimbAngle((35 * Math.PI) / 180);
     c.setSlideEnabled(true);
     controller.current = c;
-    return () => physics.removeCharacterController(c);
+    return () => {
+      physics.removeCharacterController(c);
+      world.vehicle = null;
+    };
   }, [physics]);
 
   const getOff = () => {
@@ -260,7 +318,7 @@ function Rideable({ index, spec: p }: { index: number; spec: ParkedSpec }) {
 
   const interact: Interactable = useMemo(
     () => ({
-      label: `Ride the ${spec.name.toLowerCase()}`,
+      label: `Ride your ${spec.name.toLowerCase()}`,
       reach: 3.4,
       onUse: () => {
         const u = ui.get();
@@ -271,10 +329,10 @@ function Rideable({ index, spec: p }: { index: number; spec: ParkedSpec }) {
         s.look = 0;
         s.pitch = -0.05;
         ride.dismount = getOff;
-        ride.honk = () => horn(p.kind);
-        engine.start(p.kind);
-        ui.ride({ id: p.id, name: spec.name, emoji: spec.emoji });
-        ui.toast(p.kind === 'car' ? 'Buckle up! Keep left, and mind the crossing.' : 'Helmet on! Keep left, and mind the crossing.');
+        ride.honk = () => horn(kind);
+        engine.start(kind);
+        ui.ride({ id: kind, name: spec.name, emoji: spec.emoji });
+        ui.toast(kind === 'car' ? 'Buckle up! Keep left, and mind the crossing.' : 'Helmet on! Keep left, and mind the crossing.');
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -312,11 +370,6 @@ function Rideable({ index, spec: p }: { index: number; spec: ParkedSpec }) {
       input.lookYaw = 0;
       input.lookPitch = 0;
       engine.speed(s.speed);
-    } else if (s.pos.distanceTo(world.player) > 40 && performance.now() - s.lastRide > 20000 && s.pos.distanceTo(new THREE.Vector3(...p.home)) > 0.5) {
-      // left somewhere far away: it finds its way back to its spot
-      s.pos.set(...p.home);
-      s.yaw = p.yaw;
-      b.setTranslation({ x: s.pos.x, y: s.pos.y + spec.half[1], z: s.pos.z }, true);
     }
 
     fwd.set(Math.cos(s.yaw), 0, -Math.sin(s.yaw));
@@ -337,15 +390,16 @@ function Rideable({ index, spec: p }: { index: number; spec: ParkedSpec }) {
     g.position.copy(s.pos);
     g.rotation.y = s.yaw;
     for (const w of wheels.current) w.o.rotation.z -= (s.speed * dt) / w.r;
-    live.rides[index] = { x: s.pos.x, z: s.pos.z, speed: s.speed, ridden: s.riding };
+    world.vehicle = { kind, color, x: s.pos.x, y: s.pos.y, z: s.pos.z, yaw: s.yaw, speed: s.speed, ridden: s.riding };
 
     if (s.riding) {
       eye.set(...spec.eye).applyQuaternion(q).add(s.pos);
       // a little vibration on two- and three-wheelers
-      if (p.kind !== 'car') eye.y += Math.sin(performance.now() * 0.05) * 0.004 * Math.min(Math.abs(s.speed), 3);
+      if (kind !== 'car') eye.y += Math.sin(performance.now() * 0.05) * 0.004 * Math.min(Math.abs(s.speed), 3);
       camera.position.copy(eye);
       camera.rotation.set(s.pitch, s.yaw - Math.PI / 2 + s.look, 0, 'YXZ');
       world.riding = { eye: eye.clone(), yaw: s.yaw - Math.PI / 2 };
+      world.heading = s.yaw - Math.PI / 2 + s.look;
       const speedo = document.getElementById('speedo');
       if (speedo) speedo.textContent = `${Math.round(Math.abs(s.speed) * 3.6)} km/h`;
     }
@@ -353,15 +407,15 @@ function Rideable({ index, spec: p }: { index: number; spec: ParkedSpec }) {
 
   return (
     <>
-      <group ref={group} position={p.home} rotation-y={p.yaw} userData={{ interact }}>
-        <VehicleModel kind={p.kind} color={p.color} />
+      <group ref={group} position={home} rotation-y={yaw} userData={{ interact }}>
+        <VehicleModel kind={kind} color={color} />
         {/* an invisible box so the whole vehicle is easy to tap (a bicycle is mostly air) */}
         <mesh position={[0, spec.half[1], 0]}>
           <boxGeometry args={[spec.half[0] * 2, spec.half[1] * 2, spec.half[2] * 2 + 0.2]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
         </mesh>
       </group>
-      <RigidBody ref={body} type="kinematicPosition" colliders={false} position={[p.home[0], p.home[1] + spec.half[1], p.home[2]]} rotation={[0, p.yaw, 0]}>
+      <RigidBody ref={body} type="kinematicPosition" colliders={false} position={[home[0], home[1] + spec.half[1], home[2]]} rotation={[0, yaw, 0]}>
         <CuboidCollider args={spec.half} />
       </RigidBody>
     </>

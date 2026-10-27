@@ -22,13 +22,22 @@ function refresh() {
   input.run = keys.has('ShiftLeft') || keys.has('ShiftRight');
 }
 
+/** True while you're typing (chat, your name): keys then go to the text box, not your feet. */
+export const typing = (e: Event) => e.target instanceof HTMLElement && !!e.target.closest('input, textarea');
+
 window.addEventListener('keydown', (e) => {
-  if (e.target instanceof HTMLElement && e.target.closest('input, textarea')) return;
+  if (typing(e)) return;
   keys.add(e.code);
   refresh();
 });
 window.addEventListener('keyup', (e) => {
   keys.delete(e.code);
+  refresh();
+});
+// starting to type lets go of any keys you were holding
+document.addEventListener('focusin', (e) => {
+  if (!typing(e)) return;
+  keys.clear();
   refresh();
 });
 window.addEventListener('blur', () => {

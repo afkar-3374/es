@@ -1,4 +1,4 @@
-# Publishes electrosparkzz.in: the book pages as they are, plus the 3D street at /world
+# Publishes electrosparkzz.in: the shared 3D town is the home page, the book pages sit beside it
 name: Deploy
 
 on:
@@ -25,7 +25,7 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: world/package-lock.json
-      - name: Build the 3D street
+      - name: Build the 3D town
         working-directory: world
         run: |
           npm ci
@@ -34,7 +34,10 @@ jobs:
         run: |
           mkdir _site
           rsync -a --exclude '.git' --exclude '.github' --exclude 'world' --exclude '_site' ./ _site/
-          cp -r world/dist _site/world
+          cp -r world/dist/. _site/
+          # the town used to live at /world: send old links home
+          mkdir -p _site/world
+          printf '<!doctype html><meta charset="utf-8"><title>Electrosparkzz Town</title><meta http-equiv="refresh" content="0; url=/"><link rel="canonical" href="https://electrosparkzz.in/"><a href="/">Electrosparkzz Town</a>\n' > _site/world/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

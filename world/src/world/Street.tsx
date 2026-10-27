@@ -4,6 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { CuboidCollider, RigidBody } from '@react-three/rapier';
 import { applyWetness, canvasTexture, usePBR } from './materials';
 import { world } from './state';
+import { junctions, roadById } from './layout';
 
 /*
  * Street layout (metres). The street runs east–west along X.
@@ -11,14 +12,26 @@ import { world } from './state';
  *   z  5 … 15   two-lane road, centre line at z = 10
  *   z 15 … 18   footpath on the south side, buildings beyond
  */
-export const ROAD = { north: 5, south: 15, centre: 10, length: 400 };
-const FOOTPATH_H = 0.16;
+export const ROAD = { north: 5, south: 15, centre: 10, length: 410 };
+export const FOOTPATH_H = 0.16;
+
+/** The footpaths stop where the avenues cross and at the coast and ring roads. */
+const SEGMENTS: [number, number][] = (() => {
+  const cuts = junctions(roadById('main')).map((j) => [j.at - j.half - 0.5, j.at + j.half + 0.5]).sort((a, b) => a[0] - b[0]);
+  const out: [number, number][] = [];
+  let x = -ROAD.length / 2;
+  for (const [a, b] of cuts) {
+    if (a > x) out.push([x, a]);
+    x = Math.max(x, b);
+  }
+  if (x < ROAD.length / 2) out.push([x, ROAD.length / 2]);
+  return out.filter(([a, b]) => b - a > 1);
+})();
 
 export function Street() {
   const asphalt = usePBR('asphalt_02', [ROAD.length / 6, 10 / 6]);
-  const paving = usePBR('hexagonal_concrete_paving', [ROAD.length / 2.5, 5 / 2.5]);
-  const paving2 = usePBR('hexagonal_concrete_paving', [ROAD.length / 2.5, 3 / 2.5]);
-  const soil = usePBR('red_laterite_soil_stones', [ROAD.length / 4, 60 / 4]);
+  const paving = usePBR('hexagonal_concrete_paving', [1 / 2.5, 5 / 2.5]);
+  const paving2 = usePBR('hexagonal_concrete_paving', [1 / 2.5, 3 / 2.5]);
   const kerbMat = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
@@ -28,36 +41,34 @@ export function Street() {
           g.fillRect(0, 0, 32, 8);
           g.fillStyle = '#e9e6dc';
           g.fillRect(32, 0, 32, 8);
-        }, [ROAD.length / 1.6, 1]),
+        }, [1 / 1.6, 1]),
       }),
     []
   );
   const paint = useMemo(() => new THREE.MeshStandardMaterial({ color: '#efeee8', roughness: 0.6 }), []);
 
   // Wet roads and paving in the rain
-  const wetting = useMemo(() => [asphalt, paving, paving2, soil], [asphalt, paving, paving2, soil]);
+  const wetting = useMemo(() => [asphalt, paving, paving2], [asphalt, paving, paving2]);
   useFrame(() => applyWetness(wetting, world.wet));
 
   // Road paint: dashed centre line, edge lines and a zebra crossing in front of the building
   const markings = useMemo(() => {
     const parts: { x: number; z: number; w: number; d: number }[] = [];
-    for (let x = -ROAD.length / 2; x < ROAD.length / 2; x += 6) {
+    for (let x = -ROAD.length / 2 + 6; x < ROAD.length / 2 - 8; x += 6) {
       if (Math.abs(x) < 6) continue; // no centre line across the crossing
+      if (!SEGMENTS.some(([a, b]) => x > a && x + 3 < b)) continue; // nor across junctions
       parts.push({ x: x + 1.5, z: ROAD.centre, w: 3, d: 0.12 });
     }
-    parts.push({ x: 0, z: ROAD.north + 0.35, w: ROAD.length, d: 0.12 });
-    parts.push({ x: 0, z: ROAD.south - 0.35, w: ROAD.length, d: 0.12 });
+    for (const [a, b] of SEGMENTS) {
+      parts.push({ x: (a + b) / 2, z: ROAD.north + 0.35, w: b - a, d: 0.12 });
+      parts.push({ x: (a + b) / 2, z: ROAD.south - 0.35, w: b - a, d: 0.12 });
+    }
     for (let z = ROAD.north + 0.8; z < ROAD.south - 0.6; z += 1.0) parts.push({ x: 0, z: z + 0.25, w: 4, d: 0.5 });
     return parts;
   }, []);
 
   return (
     <group>
-      {/* Ground under everything */}
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.01, 0]} receiveShadow material={soil}>
-        <planeGeometry args={[ROAD.length, 60]} />
-      </mesh>
-
       {/* Road */}
       <mesh rotation-x={-Math.PI / 2} position={[0, 0.005, ROAD.centre]} receiveShadow material={asphalt}>
         <planeGeometry args={[ROAD.length, ROAD.south - ROAD.north]} />
@@ -68,32 +79,64 @@ export function Street() {
         </mesh>
       ))}
 
-      {/* Footpaths with Kerala-style black-and-white kerbs */}
-      <mesh position={[0, FOOTPATH_H / 2, 2.5]} receiveShadow material={paving}>
-        <boxGeometry args={[ROAD.length, FOOTPATH_H, 5]} />
-      </mesh>
-      <mesh position={[0, FOOTPATH_H / 2, 16.5]} receiveShadow material={paving2}>
-        <boxGeometry args={[ROAD.length, FOOTPATH_H, 3]} />
-      </mesh>
-      {[ROAD.north - 0.12, ROAD.south + 0.12].map((z) => (
-        <mesh key={z} position={[0, 0.11, z]} castShadow receiveShadow material={kerbMat}>
-          <boxGeometry args={[ROAD.length, 0.22, 0.24]} />
-        </mesh>
+      {/* Footpaths with Kerala-style black-and-white kerbs, broken where side roads join */}
+      {SEGMENTS.map(([x0, x1]) => (
+        <Footpaths key={x0} x0={x0} x1={x1} paving={paving} paving2={paving2} kerb={kerbMat} />
       ))}
 
       <Poles />
       <StreetLights />
 
-      {/* Walkable ground, with invisible walls round the edge of the world */}
       <RigidBody type="fixed" colliders={false}>
-        <CuboidCollider args={[ROAD.length / 2, 5, 0.5]} position={[0, 4, -29]} />
-        <CuboidCollider args={[ROAD.length / 2, 5, 0.5]} position={[0, 4, 29]} />
-        <CuboidCollider args={[0.5, 5, 30]} position={[-ROAD.length / 2 + 5, 4, 0]} />
-        <CuboidCollider args={[0.5, 5, 30]} position={[ROAD.length / 2 - 5, 4, 0]} />
-        <CuboidCollider args={[ROAD.length / 2, 0.5, 40]} position={[0, -0.5, 0]} />
-        <CuboidCollider args={[ROAD.length / 2, FOOTPATH_H / 2, 2.5]} position={[0, FOOTPATH_H / 2, 2.5]} />
-        <CuboidCollider args={[ROAD.length / 2, FOOTPATH_H / 2, 1.5]} position={[0, FOOTPATH_H / 2, 16.5]} />
+        {SEGMENTS.map(([x0, x1]) => (
+          <group key={x0}>
+            <CuboidCollider args={[(x1 - x0) / 2, FOOTPATH_H / 2, 2.5]} position={[(x0 + x1) / 2, FOOTPATH_H / 2, 2.5]} />
+            <CuboidCollider args={[(x1 - x0) / 2, FOOTPATH_H / 2, 1.5]} position={[(x0 + x1) / 2, FOOTPATH_H / 2, 16.5]} />
+          </group>
+        ))}
       </RigidBody>
+    </group>
+  );
+}
+
+/** One stretch of both footpaths (materials are cloned so each stretch tiles at its own length). */
+function Footpaths({ x0, x1, paving, paving2, kerb }: { x0: number; x1: number; paving: THREE.MeshStandardMaterial; paving2: THREE.MeshStandardMaterial; kerb: THREE.MeshStandardMaterial }) {
+  const w = x1 - x0;
+  const cx = (x0 + x1) / 2;
+  const mats = useMemo(() => {
+    const tiled = (m: THREE.MeshStandardMaterial) => {
+      const c = m.clone();
+      for (const key of ['map', 'normalMap', 'roughnessMap'] as const) {
+        const t = m[key];
+        if (!t) continue;
+        c[key] = t.clone();
+        c[key]!.repeat.set(t.repeat.x * w, t.repeat.y);
+        c[key]!.needsUpdate = true;
+      }
+      return c;
+    };
+    return { a: tiled(paving), b: tiled(paving2), k: tiled(kerb) };
+  }, [paving, paving2, kerb, w]);
+  // wet with the rest
+  useFrame(() => {
+    mats.a.roughness = paving.roughness;
+    mats.a.color.copy(paving.color);
+    mats.b.roughness = paving2.roughness;
+    mats.b.color.copy(paving2.color);
+  });
+  return (
+    <group>
+      <mesh position={[cx, FOOTPATH_H / 2, 2.5]} receiveShadow material={mats.a}>
+        <boxGeometry args={[w, FOOTPATH_H, 5]} />
+      </mesh>
+      <mesh position={[cx, FOOTPATH_H / 2, 16.5]} receiveShadow material={mats.b}>
+        <boxGeometry args={[w, FOOTPATH_H, 3]} />
+      </mesh>
+      {[ROAD.north - 0.12, ROAD.south + 0.12].map((z) => (
+        <mesh key={z} position={[cx, 0.11, z]} castShadow receiveShadow material={mats.k}>
+          <boxGeometry args={[w, 0.22, 0.24]} />
+        </mesh>
+      ))}
     </group>
   );
 }

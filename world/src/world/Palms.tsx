@@ -121,7 +121,14 @@ export function Palms({ spots }: { spots: PalmSpot[] }) {
   const crowns = useRef<THREE.InstancedMesh>(null);
   const coconuts = useRef<THREE.InstancedMesh>(null);
   const items = useMemo(
-    () => spots.map((s) => ({ ...s, scale: s.scale ?? 0.85 + Math.random() * 0.35, turn: s.turn ?? Math.random() * Math.PI * 2, phase: Math.random() * 10 })),
+    () =>
+      spots.map((s) => {
+        const scale = s.scale ?? 0.85 + Math.random() * 0.35;
+        const turn = s.turn ?? Math.random() * Math.PI * 2;
+        // where the crown sits on top of the leaning trunk
+        const top = new THREE.Vector3(1.2, TRUNK_HEIGHT, 0).multiplyScalar(scale).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn);
+        return { ...s, scale, turn, top, phase: Math.random() * 10 };
+      }),
     [spots]
   );
 
@@ -135,7 +142,7 @@ export function Palms({ spots }: { spots: PalmSpot[] }) {
     const t = clock.elapsedTime;
     const strength = 0.02 + Math.min(world.wind, 60) * 0.0025;
     items.forEach((it, i) => {
-      const top = new THREE.Vector3(1.2, TRUNK_HEIGHT, 0).multiplyScalar(it.scale).applyAxisAngle(new THREE.Vector3(0, 1, 0), it.turn);
+      const top = it.top;
       e.set(0, it.turn, 0);
       q.setFromEuler(e);
       s.setScalar(it.scale);

@@ -1,8 +1,11 @@
+import type { VehicleKind } from './vehicleModels';
+
 /**
- * Riding a vehicle: the Vehicles component registers how to get off and honk.
- * (Kept separate so the on-screen buttons don't need the 3D code.)
+ * Riding a vehicle: the Vehicles component registers how to call your vehicle,
+ * get off and honk. (Kept separate so the on-screen buttons don't need the 3D code.)
  */
 export const ride = {
+  call: (_kind: VehicleKind) => {},
   dismount: () => {},
   honk: () => {},
 };

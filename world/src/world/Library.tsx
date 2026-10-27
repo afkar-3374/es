@@ -16,10 +16,10 @@ const INNER = { x0: BUILDING.minX + 0.3, x1: BUILDING.maxX - 0.3, z0: BUILDING.m
 
 /** The four books in the one unlocked cupboard. */
 export const BOOKS: Book[] = [
-  { id: 'electrosparkzz', title: 'Electrosparkzz', subtitle: 'We’re building something lovely', url: '../', colors: ['#ffc9de', '#d9c9ff'], emoji: '✨' },
-  { id: 'triply', title: 'Triply', subtitle: 'Discover More. Travel Smarter.', url: '../triply.html', colors: ['#bfe6ff', '#c9f2e2'], emoji: '✈️' },
-  { id: 'herai', title: 'HERAI', subtitle: 'Intelligence Designed Around Her.', url: '../herai.html', colors: ['#ecd2ff', '#ffd0e5'], emoji: '🌸' },
-  { id: 'glazy', title: 'Glazy', subtitle: 'A private little world for two', url: '../glazy.html', colors: ['#ffcade', '#ffe1cc'], emoji: '💗' },
+  { id: 'electrosparkzz', title: 'Electrosparkzz', subtitle: 'We’re building something lovely', url: '/book.html', colors: ['#ffc9de', '#d9c9ff'], emoji: '✨' },
+  { id: 'triply', title: 'Triply', subtitle: 'Discover More. Travel Smarter.', url: '/triply.html', colors: ['#bfe6ff', '#c9f2e2'], emoji: '✈️' },
+  { id: 'herai', title: 'HERAI', subtitle: 'Intelligence Designed Around Her.', url: '/herai.html', colors: ['#ecd2ff', '#ffd0e5'], emoji: '🌸' },
+  { id: 'glazy', title: 'Glazy', subtitle: 'A private little world for two', url: '/glazy.html', colors: ['#ffcade', '#ffe1cc'], emoji: '💗' },
 ];
 
 // Cupboards along both side walls; the one at the spotlight is open

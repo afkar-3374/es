@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { VehicleKind } from './vehicleModels';
 
 /**
  * Live values shared by everything in the world, read every frame (not React state,
@@ -25,6 +26,14 @@ export const world = {
   riding: null as null | { eye: THREE.Vector3; yaw: number },
   /** After getting off a vehicle: where to put the walker */
   dismountAt: null as null | THREE.Vector3,
+  /** Which way you face (radians, 0 = towards −z), for the map and for others */
+  heading: 0,
+  /** Where others should draw you: your feet, or the seat you're sitting on */
+  avatar: new THREE.Vector3(0, 0.2, 16.5),
+  /** Your own vehicle, if you've called one */
+  vehicle: null as null | { kind: VehicleKind; color: string; x: number; y: number; z: number; yaw: number; speed: number; ridden: boolean },
+  /** What you last said (shown over your head to others) */
+  bubble: null as null | { text: string; at: number },
 };
 
 /** Footprint of the Electrosparkzz building on the ground (x/z). */

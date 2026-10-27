@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Served at electrosparkzz.in/world
+// Served at electrosparkzz.in (the town is the home page)
 export default defineConfig({
-  base: '/world/',
+  base: '/',
   plugins: [react()],
   build: {
     outDir: 'dist',

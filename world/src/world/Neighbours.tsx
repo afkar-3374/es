@@ -5,6 +5,7 @@ import { CuboidCollider, RigidBody } from '@react-three/rapier';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { usePBR } from './materials';
 import { world } from './state';
+import { rng } from './layout';
 
 /*
  * The rest of the street: two- and three-storey Kerala shop-buildings with closed
@@ -12,23 +13,14 @@ import { world } from './state';
  * boxes are merged by material so the whole street is a few draw calls.
  */
 
-type Kind = 'plaster' | 'shutter' | 'glass' | 'lit' | 'frame' | 'roof' | 'concrete' | 'sign' | 'tank';
+export type Kind = 'plaster' | 'shutter' | 'glass' | 'lit' | 'frame' | 'roof' | 'concrete' | 'sign' | 'tank';
 
-const PLASTER = ['#f1e6c8', '#cfe3d1', '#f3d2bd', '#e7e1d6', '#d9e2ef', '#f4ddb0', '#e9cfd6', '#d8d2c2'];
+export const PLASTER = ['#f1e6c8', '#cfe3d1', '#f3d2bd', '#e7e1d6', '#d9e2ef', '#f4ddb0', '#e9cfd6', '#d8d2c2'];
 const SHUTTER = ['#6f8fa6', '#7e8c79', '#8a8f96', '#a08b6b', '#5f7d8c'];
 const SIGN = ['#2f5d8a', '#b8423c', '#2e7d5b', '#d08a2a', '#6a4a8c', '#3a3a3a'];
 
-// Deterministic randomness so the street looks the same for everyone
-function rng(seed: number) {
-  let s = seed >>> 0;
-  return () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-}
-
 /** A box with UVs in metres (so textures don't stretch) and a flat vertex colour. */
-function box(w: number, h: number, d: number, x: number, y: number, z: number, color: THREE.ColorRepresentation, tile = 2.5) {
+export function box(w: number, h: number, d: number, x: number, y: number, z: number, color: THREE.ColorRepresentation, tile = 2.5) {
   const g = new THREE.BoxGeometry(w, h, d);
   const uv = g.attributes.uv;
   // face order: +x, -x, +y, -y, +z, -z (4 vertices each)
@@ -52,7 +44,7 @@ function box(w: number, h: number, d: number, x: number, y: number, z: number, c
 }
 
 /** A gable roof (triangle prism along x) of clay tiles. */
-function gableRoof(w: number, d: number, rise: number, x: number, y: number, z: number) {
+export function gableRoof(w: number, d: number, rise: number, x: number, y: number, z: number) {
   const shape = new THREE.Shape();
   shape.moveTo(-d / 2 - 0.5, 0);
   shape.lineTo(d / 2 + 0.5, 0);
@@ -69,14 +61,14 @@ function gableRoof(w: number, d: number, rise: number, x: number, y: number, z: 
   return g;
 }
 
-interface Lot {
+export interface Lot {
   x0: number;
   x1: number;
   depth: number;
   floors: number;
 }
 
-function buildLot(lot: Lot, r: () => number, add: (k: Kind, g: THREE.BufferGeometry) => void) {
+export function buildLot(lot: Lot, r: () => number, add: (k: Kind, g: THREE.BufferGeometry) => void) {
   const w = lot.x1 - lot.x0;
   const cx = (lot.x0 + lot.x1) / 2;
   const floorH = 3.5;
@@ -126,7 +118,8 @@ function buildLot(lot: Lot, r: () => number, add: (k: Kind, g: THREE.BufferGeome
   }
 }
 
-function makeLots(seed: number, from: number, to: number, dir: 1 | -1): Lot[] {
+/** Shop-buildings side by side from `from` towards `to`, leaving `skip` bands (side roads) clear. */
+export function makeLots(seed: number, from: number, to: number, dir: 1 | -1, skip: [number, number][] = [], maxDepth = 16): Lot[] {
   const r = rng(seed);
   const lots: Lot[] = [];
   let x = from;
@@ -135,8 +128,16 @@ function makeLots(seed: number, from: number, to: number, dir: 1 | -1): Lot[] {
     const gap = r() < 0.35 ? 1 + r() * 1.5 : 0;
     const x0 = dir > 0 ? x + gap : x - gap - w;
     const x1 = x0 + w;
-    lots.push({ x0, x1, depth: 11 + Math.floor(r() * 6), floors: 1 + Math.floor(r() * 3) });
+    const depth = Math.min(11 + Math.floor(r() * 6), maxDepth);
+    const floors = 1 + Math.floor(r() * 3);
     x = dir > 0 ? x1 : x0;
+    if (dir > 0 ? x1 > to : x0 < to) break;
+    const band = skip.find(([a, b]) => x1 > a && x0 < b);
+    if (band) {
+      x = dir > 0 ? band[1] : band[0];
+      continue;
+    }
+    lots.push({ x0, x1, depth, floors });
   }
   return lots;
 }
@@ -156,9 +157,11 @@ export function Neighbours() {
     const colliders: { x: number; z: number; w: number; d: number; h: number }[] = [];
 
     // north side: on both sides of the Electrosparkzz building, fronts at z = 0
-    const north = [...makeLots(11, 13.5, 160, 1), ...makeLots(12, -13.5, -160, -1)];
+    // (leaving room for the avenues that cross at x = ±100, and stopping short of the end roads)
+    const skip: [number, number][] = [[-107.5, -92.5], [92.5, 107.5]];
+    const north = [...makeLots(11, 13.5, 197, 1, skip), ...makeLots(12, -13.5, -197, -1, skip)];
     // south side: fronts at z = 18, facing the road
-    const south = [...makeLots(21, -160, 160, 1)];
+    const south = [...makeLots(21, -197, 197, 1, skip)];
 
     for (const lot of north) {
       const parts: [Kind, THREE.BufferGeometry][] = [];
