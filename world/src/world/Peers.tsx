@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { useEffect, useMemo, useRef } from 'react';
+import { Component, Suspense, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import { CuboidCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
-import { RUN_FRAMES, showFrame, strideBob, usePersonSource, walkCycle, WALK_FRAMES } from './people';
+import { RUN_FRAMES, SEX, showFrame, strideBob, useClips, usePersonSource, walkCycle, WALK_FRAMES } from './people';
 import { SPECS, VehicleModel, type VehicleKind } from './vehicleModels';
 import { LOOKS, peers, useNet, type Peer } from '../net/net';
 import { world } from './state';
@@ -72,6 +72,20 @@ function Smoother() {
   return null;
 }
 
+/** If a person's model can't load, show `fallback` instead of breaking the town. */
+class PersonGuard extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(e: unknown) {
+    console.warn('[people] a look failed to load; showing the default', e);
+  }
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
 export function Peers() {
   const { roster } = useNet();
   return (
@@ -79,7 +93,12 @@ export function Peers() {
       <Smoother />
       {roster.map((p) => (
         <group key={p.id}>
-          <PeerPerson id={p.id} look={p.look} name={p.name} />
+          {/* each person loads on their own (the town doesn't wait), and a look that fails shows the first one */}
+          <Suspense fallback={null}>
+            <PersonGuard fallback={<PeerPerson id={p.id} look={0} name={p.name} />}>
+              <PeerPerson id={p.id} look={p.look} name={p.name} />
+            </PersonGuard>
+          </Suspense>
           {p.vehicle && <PeerVehicle key={`${p.vehicle.kind}${p.vehicle.color}`} id={p.id} kind={p.vehicle.kind} color={p.vehicle.color} />}
         </group>
       ))}
@@ -94,9 +113,13 @@ function seatOffset(kind: VehicleKind): [number, number] {
 }
 
 function PeerPerson({ id, look, name }: { id: string; look: number; name: string }) {
-  const source = usePersonSource(LOOKS[look] ?? LOOKS[0]);
+  const lookName = LOOKS[look] ?? LOOKS[0];
+  const source = usePersonSource(lookName);
+  // recorded motion: a man's or a woman's walk, run and stance
+  const sex = SEX[lookName] ?? 'f';
+  const clips = useClips([`${sex}_walk`, `${sex}_run`, `${sex}_idle`] as const);
   // walking, standing and sitting are baked frames (no skeleton to update every frame)
-  const cycle = useMemo(() => walkCycle(source), [source]);
+  const cycle = useMemo(() => walkCycle(source, { walk: clips[`${sex}_walk`], run: clips[`${sex}_run`], idle: clips[`${sex}_idle`] }), [source, clips, sex]);
   const model = useMemo(() => {
     const m = cycle.frames[0].clone();
     m.traverse((o) => (o.castShadow = true));
@@ -141,12 +164,13 @@ function PeerPerson({ id, look, name }: { id: string; look: number; name: string
     else if (g.visible) {
       const speed = Math.min(p.speed, 7);
       if (speed > 0.2) {
-        // the legs keep pace with the ground: a walking stride is about 1.4 m, a running one 2.4 m
+        // the legs keep pace with the ground: one loop of the walk (or run) covers its stride
         const run = speed > 2.6;
-        phase.current += (dt * Math.PI * 2 * speed) / (run ? 2.4 : 1.4);
+        phase.current += (dt * Math.PI * 2 * speed) / (run ? cycle.strides.run : cycle.strides.walk);
         const t = (phase.current / (Math.PI * 2)) % 1;
         showFrame(model, run ? cycle.run[Math.floor(t * RUN_FRAMES)] : cycle.frames[Math.floor(t * WALK_FRAMES)]);
-        g.position.y += strideBob(phase.current, run);
+        // (recorded motion has its own rise and fall)
+        if (!cycle.mocap) g.position.y += strideBob(phase.current, run);
       } else showFrame(model, cycle.stand);
     }
 

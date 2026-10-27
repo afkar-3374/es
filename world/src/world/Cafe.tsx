@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { Lamp, VirtualLight } from './Lamps';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox, Text } from '@react-three/drei';
 import { CuboidCollider, CylinderCollider, RigidBody } from '@react-three/rapier';
 import { canvasTexture, usePBR } from './materials';
 import { ui, type DrinkKind, type Interactable } from './interact';
 import { seatInteract } from './seats';
+import { applyFace, applyPose, instancePerson, poseFromClip, SMILE, STANDING, UPPER_BODY, useClips, usePersonSource } from './people';
 import { Cup, DRINKS } from './Cups';
 import { world } from './state';
 
@@ -14,10 +15,10 @@ const FONT = `${import.meta.env.BASE_URL}fonts/Poppins-SemiBold.ttf`;
 const FLOOR = 4.8;
 
 /*
- * The library café, by the front window on the left: a self-service counter along the
- * side wall with an espresso machine and a chai kettle, a menu board, and two little
- * bistro tables at the glass.
- *   counter front x = −9.3, from z −4.0 to −1.1
+ * The library café, by the front window on the left. A counter along the side wall
+ * with Anu the barista behind it, an espresso machine and a chai kettle, a menu
+ * board, and two little bistro tables at the glass.
+ *   counter front x = −9.3, from z −4.0 to −1.1; Anu stands at x −10.6
  */
 const COUNTER_X = -9.55;
 const Z0 = -4.0;
@@ -29,6 +30,7 @@ export function Cafe() {
       <Counter />
       <BackCounter />
       <MenuBoard />
+      <Barista />
       <BistroTable x={-7.3} z={-1.5} />
       <BistroTable x={-6.9} z={-3.4} />
       <CafeLights />
@@ -46,8 +48,8 @@ function order(kind: DrinkKind) {
   if (pending) return;
   pending = true;
   const d = DRINKS[kind];
-  ui.toast(`The machine is making your ${d.name.toLowerCase()}…`);
-  brewing.until = performance.now() + 2600;
+  ui.toast(`Anu is making your ${d.name.toLowerCase()}…`);
+  baristaBusy.until = performance.now() + 2600;
   setTimeout(() => {
     pending = false;
     ui.takeDrink({ kind, name: d.name, emoji: d.emoji, sipsLeft: 4, from: 'cafe' });
@@ -60,19 +62,19 @@ function order(kind: DrinkKind) {
 }
 
 const menu: Interactable = {
-  label: 'Make yourself a drink',
+  label: 'Order a drink from Anu',
   reach: 3.6,
   onUse: () =>
     ui.showCard({
       emoji: '☕',
       title: 'What would you like?',
-      text: 'Self-service, and everything is on the house today. Tea or coffee?',
+      text: 'Anu smiles: “Everything is on the house today. Tea or coffee?”',
       actions: (Object.keys(DRINKS) as DrinkKind[]).map((k) => ({ label: `${DRINKS[k].emoji} ${DRINKS[k].name}`, run: () => order(k) })),
     }),
 };
 
-/** While the machine is making your drink (a cup waits on the counter). */
-const brewing = { until: 0 };
+/** Shared with the barista so she can look busy while making your drink. */
+const baristaBusy = { until: 0 };
 
 function Counter() {
   const wood = usePBR('wood_floor', [1.2, 0.5], { tint: '#8a5d3b' });
@@ -111,7 +113,7 @@ function Counter() {
           <meshStandardMaterial color="#2b2238" roughness={0.6} />
         </mesh>
         <Text font={FONT} position={[0, 0.1, 0.012]} rotation-x={-0.25} fontSize={0.035} color="#ffd38f" anchorX="center" anchorY="middle">
-          SELF SERVICE
+          ORDER HERE
         </Text>
       </group>
       {/* a cup waiting on the counter while your drink is being made */}
@@ -128,7 +130,7 @@ function Counter() {
 function PendingCup() {
   const group = useRef<THREE.Group>(null);
   useFrame(() => {
-    if (group.current) group.current.visible = performance.now() < brewing.until;
+    if (group.current) group.current.visible = performance.now() < baristaBusy.until;
   });
   return (
     <group ref={group} position={[COUNTER_X + 0.15, FLOOR + 1.055, (Z0 + Z1) / 2]} visible={false} userData={{ keep: true }}>
@@ -259,7 +261,7 @@ function MenuBoard() {
         g.fillStyle = '#f6d7a7';
         g.font = '600 22px Poppins, Arial, sans-serif';
         g.textAlign = 'center';
-        g.fillText('help yourself at the counter ♥', 256, 356);
+        g.fillText('ask Anu at the counter ♥', 256, 356);
       }),
     []
   );
@@ -268,6 +270,58 @@ function MenuBoard() {
       <planeGeometry args={[1.6, 1.2]} />
       <meshStandardMaterial map={tex} roughness={0.85} />
     </mesh>
+  );
+}
+
+/**
+ * Anu, behind the counter, moving with Rocketbox motion capture: she stands at ease,
+ * chats with her hands when you come up to the counter, looks at you, and her hands get
+ * busy while she makes your drink.
+ */
+function Barista() {
+  const source = usePersonSource('barista');
+  const clips = useClips(['f_idle', 'f_talk'] as const);
+  const { model, bones } = useMemo(() => {
+    const { model, bones } = instancePerson(source, true);
+    applyPose(model, bones, STANDING);
+    applyFace(bones, SMILE);
+    return { model, bones };
+  }, [source]);
+  useEffect(() => {
+    if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esBarista: bones });
+  }, [bones]);
+
+  const group = useRef<THREE.Group>(null);
+  const look = useRef(0);
+  const chat = useRef(0);
+  const work = useRef(0);
+  const tmp = useMemo(() => new THREE.Vector3(), []);
+  useFrame(({ clock }, dt) => {
+    const t = clock.elapsedTime;
+    const g = group.current;
+    if (!g) return;
+    g.worldToLocal(tmp.copy(world.player));
+    const near = Math.hypot(tmp.x, tmp.z) < 6 && tmp.z > 0 && Math.abs(world.player.y - FLOOR) < 1.5;
+    const busy = performance.now() < baristaBusy.until;
+    // standing at ease; talking with her hands when you're at the counter
+    poseFromClip(model, bones, clips.f_idle, t);
+    chat.current += ((near && !busy ? 1 : 0) - chat.current) * Math.min(dt * 2, 1);
+    if (chat.current > 0.01) poseFromClip(model, bones, clips.f_talk, t, chat.current, false, UPPER_BODY);
+    // looking at you, or down at the machine while she works
+    const target = busy ? -0.9 : near ? THREE.MathUtils.clamp(Math.atan2(tmp.x, tmp.z), -0.9, 0.9) : Math.sin(t * 0.2) * 0.2;
+    look.current += (target - look.current) * Math.min(dt * 3, 1);
+    bones.Bip01_Head.rotation.x += look.current;
+    // working hands while she makes a drink
+    work.current += ((busy ? 1 : 0) - work.current) * Math.min(dt * 4, 1);
+    const w = work.current;
+    bones.Bip01_L_Forearm.rotation.z += -w * 1.1 + Math.sin(t * 7) * 0.12 * w;
+    bones.Bip01_R_Forearm.rotation.z += -w * 1.1 + Math.sin(t * 7 + 2) * 0.12 * w;
+  });
+
+  return (
+    <group ref={group} position={[-10.65, FLOOR, -2.55]} rotation-y={Math.PI / 2} userData={{ interact: menu }}>
+      <primitive object={model} />
+    </group>
   );
 }
 

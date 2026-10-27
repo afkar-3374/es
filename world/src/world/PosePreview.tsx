@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { RUN_FRAMES, usePersonSource, walkCycle, WALK_FRAMES } from './people';
+import { RUN_FRAMES, SEX, useClips, usePersonSource, walkCycle, WALK_FRAMES } from './people';
 import { LOOKS } from '../net/net';
 
 /*
@@ -7,7 +7,14 @@ import { LOOKS } from '../net/net';
  * and riding frames, side-on, at x 0…, z −30, so the poses can be checked by eye.
  */
 function Row({ look, z }: { look: string; z: number }) {
-  const cycle = walkCycle(usePersonSource(look));
+  const source = usePersonSource(look);
+  const sex = SEX[look] ?? 'f';
+  const clips = useClips([`${sex}_walk`, `${sex}_run`, `${sex}_idle`] as const);
+  const mocap = new URLSearchParams(location.search).get('poses') !== 'old';
+  const cycle = useMemo(
+    () => walkCycle(source, mocap ? { walk: clips[`${sex}_walk`], run: clips[`${sex}_run`], idle: clips[`${sex}_idle`] } : undefined),
+    [source, clips, sex, mocap]
+  );
   const items = useMemo(
     () => [
       ...[0, 1, 2, 3, 4, 5].map((i) => cycle.frames[(i * WALK_FRAMES) / 6]),

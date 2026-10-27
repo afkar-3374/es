@@ -10,7 +10,8 @@ import type { VehicleKind } from '../world/vehicleModels';
  * Chat goes over the same channel. Nothing is stored anywhere.
  */
 
-export const LOOKS = ['rider', 'barista', 'receptionist'] as const;
+// (new looks go on the end: everyone in town refers to a look by its place in this list)
+export const LOOKS = ['rider', 'barista', 'receptionist', 'kurta', 'hoodie', 'jacket', 'salwar', 'dress'] as const;
 export const KINDS: VehicleKind[] = ['bike', 'car', 'auto', 'cycle'];
 
 /** 0 walking, 1 sitting, 2 riding */

@@ -4,7 +4,18 @@ import { isTouch } from '../player/input';
 import { loadProfile, LOOKS, type Profile } from '../net/net';
 import type { Conditions } from '../env/kasaragod';
 
-const LOOK_LABELS: Record<(typeof LOOKS)[number], string> = { rider: '🧢 Casual', barista: '☕ Café', receptionist: '💼 Smart' };
+const LOOK_LABELS: Record<(typeof LOOKS)[number], string> = {
+  rider: '👔 Shirt',
+  kurta: '🕌 Kurta',
+  hoodie: '🧢 Hoodie',
+  jacket: '🧥 Jacket',
+  receptionist: '💼 Smart',
+  barista: '☕ Café',
+  salwar: '🧕 Salwar',
+  dress: '👗 Dress',
+};
+/** Men's looks first, then women's (the order on the card, not in the list) */
+const CARD_ORDER: (typeof LOOKS)[number][] = ['rider', 'kurta', 'hoodie', 'jacket', 'receptionist', 'barista', 'salwar', 'dress'];
 
 /** The welcome card: your name and look, loading progress, and the way in. */
 export function Intro({ c, onEnter }: { c: Conditions; onEnter: (p: Profile) => void }) {
@@ -41,11 +52,14 @@ export function Intro({ c, onEnter }: { c: Conditions; onEnter: (p: Profile) => 
             <input value={profile.name} maxLength={20} autoComplete="nickname" onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
           </label>
           <div className="looks" role="radiogroup" aria-label="How you look">
-            {LOOKS.map((l, i) => (
-              <button key={l} type="button" role="radio" aria-checked={profile.look === i} className={profile.look === i ? 'on' : ''} onClick={() => setProfile({ ...profile, look: i })}>
-                {LOOK_LABELS[l]}
-              </button>
-            ))}
+            {CARD_ORDER.map((l) => {
+              const i = LOOKS.indexOf(l);
+              return (
+                <button key={l} type="button" role="radio" aria-checked={profile.look === i} className={profile.look === i ? 'on' : ''} onClick={() => setProfile({ ...profile, look: i })}>
+                  {LOOK_LABELS[l]}
+                </button>
+              );
+            })}
           </div>
           <ul className="keys">
             {isTouch ? (

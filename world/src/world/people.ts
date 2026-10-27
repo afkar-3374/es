@@ -221,6 +221,65 @@ export function bakedPerson(source: THREE.Group, key: string, pose: (bones: Bone
 export const WALK_FRAMES = 24;
 export const RUN_FRAMES = 16;
 
+/* ── Motion capture (Microsoft Rocketbox clips, made by tools/fetch-anims.mjs) ── */
+
+export interface Clip {
+  frames: number;
+  fps: number;
+  duration: number;
+  /** metres one loop travels (walks and runs) */
+  stride: number;
+  /** per bone: a quaternion per frame (or one, for a bone that doesn't move) */
+  bones: Record<string, number[]>;
+  /** the hips' offset per frame, centimetres (x, z drift removed; y as recorded) */
+  hip: number[];
+}
+
+/** Bones of the right arm and hand (for a wave on top of another motion). */
+export const RIGHT_ARM = (n: string) => n.startsWith('Bip01_R_');
+/** Bones above the hips (for gestures while sitting). */
+export const UPPER_BODY = (n: string) => !/Thigh|Calf|Foot|Toe|Pelvis|^Bip01$/.test(n);
+
+/** Which clips suit each look (the motion of a man or a woman). */
+export const SEX: Record<string, 'f' | 'm'> = { rider: 'm', barista: 'f', receptionist: 'f', kurta: 'm', hoodie: 'm', jacket: 'm', salwar: 'f', dress: 'f' };
+
+const clipUrl = (name: string) => `${import.meta.env.BASE_URL}anims/${name}.json`;
+/** Load clips by name (suspends until they're here). */
+export function useClips<const N extends string>(names: readonly N[]): Record<N, Clip> {
+  const texts = useLoader(THREE.FileLoader, names.map(clipUrl)) as unknown as string[];
+  return useMemo(() => Object.fromEntries(names.map((n, i) => [n, JSON.parse(texts[i]) as Clip])) as Record<N, Clip>, [texts, names]);
+}
+
+const qa = new THREE.Quaternion();
+const qb = new THREE.Quaternion();
+/**
+ * Pose the bones as the clip has them at `time` seconds (looping), blending between its
+ * frames; `weight` < 1 mixes it over the pose the bones already have. The hips move by the
+ * clip's offset from its first frame (heights differ between people).
+ */
+export function poseFromClip(model: THREE.Object3D, bones: Bones, clip: Clip, time: number, weight = 1, hips = true, only?: (bone: string) => boolean) {
+  const t = (((time / clip.duration) % 1) + 1) % 1;
+  const f = t * clip.frames;
+  const a = Math.floor(f) % clip.frames;
+  const b = (a + 1) % clip.frames;
+  const k = f - Math.floor(f);
+  for (const [n, q] of Object.entries(clip.bones)) {
+    const bone = bones[n];
+    if (!bone || (only && !only(n))) continue;
+    if (q.length === 4) qa.fromArray(q);
+    else qa.fromArray(q, a * 4).slerp(qb.fromArray(q, b * 4), k);
+    if (weight >= 1) bone.quaternion.copy(qa);
+    else bone.quaternion.slerp(qa, weight);
+  }
+  const root = bones.Bip01;
+  const tpos = model.userData.tpos as Record<string, THREE.Vector3> | undefined;
+  if (hips && root && tpos?.Bip01 && weight > 0) {
+    const h = clip.hip;
+    const lerp = (i: number) => h[a * 3 + i] + (h[b * 3 + i] - h[a * 3 + i]) * k;
+    root.position.set(tpos.Bip01.x + lerp(0), tpos.Bip01.y + (lerp(1) - h[1]), tpos.Bip01.z + lerp(2));
+  }
+}
+
 /** A smooth bump around `at` (radians round the stride), `width` wide. */
 function bump(phase: number, at: number, width: number) {
   const d = Math.atan2(Math.sin(phase - at), Math.cos(phase - at));
@@ -330,16 +389,28 @@ export const BIKE_TUCK: Pose = [
 
 /**
  * A walk and run cycle baked into still frames (plus standing, sitting and riding), so
- * people move without a skeleton. Show a frame by swapping each part's geometry.
+ * people move without a skeleton. Show a frame by swapping each part's geometry. With
+ * motion-capture clips the walk, run and standing are recorded motion; without, posed.
  */
-export function walkCycle(source: THREE.Group) {
+export function walkCycle(source: THREE.Group, clips?: { walk: Clip; run: Clip; idle: Clip }) {
   const pose = (p: Pose) => (bones: Bones) => applyPose(source, bones, p);
-  const frames = Array.from({ length: WALK_FRAMES }, (_, i) => bakedPerson(source, `walk${i}`, pose(walkPose((i / WALK_FRAMES) * Math.PI * 2))));
-  const run = Array.from({ length: RUN_FRAMES }, (_, i) => bakedPerson(source, `run${i}`, pose(walkPose((i / RUN_FRAMES) * Math.PI * 2, true))));
-  const stand = bakedPerson(source, 'stand', pose(STANDING_EASY));
+  const fromClip = (clip: Clip, i: number, n: number) => (bones: Bones) => {
+    applyPose(source, bones, []);
+    poseFromClip(source, bones, clip, (i / n) * clip.duration);
+  };
+  const tag = clips ? 'mocap-' : '';
+  const frames = Array.from({ length: WALK_FRAMES }, (_, i) =>
+    bakedPerson(source, `${tag}walk${i}`, clips ? fromClip(clips.walk, i, WALK_FRAMES) : pose(walkPose((i / WALK_FRAMES) * Math.PI * 2)))
+  );
+  const run = Array.from({ length: RUN_FRAMES }, (_, i) =>
+    bakedPerson(source, `${tag}run${i}`, clips ? fromClip(clips.run, i, RUN_FRAMES) : pose(walkPose((i / RUN_FRAMES) * Math.PI * 2, true)))
+  );
+  const stand = bakedPerson(source, `${tag}stand`, clips ? fromClip(clips.idle, 0, 1) : pose(STANDING_EASY));
   const sit = bakedPerson(source, 'sit', pose([...SEATED, ...hands(0.8)]));
   const bike = bakedPerson(source, 'bike', pose(BIKE_TUCK));
-  return { frames, run, stand, sit, bike };
+  // how far a loop goes, so feet keep pace with the ground
+  const strides = { walk: clips?.walk.stride || 1.4, run: clips?.run.stride || 2.4 };
+  return { frames, run, stand, sit, bike, strides, mocap: !!clips };
 }
 
 /** Make `person` (a copy of one of the cycle's frames) show `frame`. */

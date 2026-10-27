@@ -8,6 +8,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { canvasTexture, usePBR } from './materials';
 import { ui, type Interactable } from './interact';
 import { world } from './state';
+import { Receptionist } from './Receptionist';
 
 const FONT = `${import.meta.env.BASE_URL}fonts/Poppins-SemiBold.ttf`;
 const FLOOR = 0.3;
@@ -105,6 +106,7 @@ function Lobby() {
           <Plant position={[0, 0, 0]} />
         </group>
       </group>
+      <Receptionist position={[-6.5, FLOOR + 0.06, -3.75]} />
 
       {/* Floor directory, facing the entrance */}
       <group position={[4.6, FLOOR, -4.2]}>
