@@ -14,8 +14,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 
-/** Where the Electrosparkzz building stands (for now: Kasaragod town centre). */
-const SITE = { lat: 12.4996, lon: 74.9869 };
+/** Where the Electrosparkzz building stands: on NH66 at Mogral, by the bus stop. */
+const SITE = { lat: 12.565, lon: 74.9542 };
 
 const CACHE = process.argv[2];
 if (!CACHE) throw new Error('usage: node tools/build-map.mjs <cache-dir>');
@@ -23,9 +23,9 @@ const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'map')
 const TILE = 1000;
 const CELL = 5; // water mask resolution (m)
 const CELLS = TILE / CELL;
-/** Kept clear for the building, its car park, its street and the shops along it (world space). */
-const CLEAR_BUILDINGS = { x0: -60, x1: 60, z0: -82, z1: 36 };
-const CLEAR_ROADS = { x0: -60, x1: 60, z0: -82, z1: 36 };
+/** Kept clear for the building, its street and the shops along it (world space; not deeper, so roads behind stay whole). */
+const CLEAR_BUILDINGS = { x0: -60, x1: 60, z0: -30, z1: 36 };
+const CLEAR_ROADS = { x0: -60, x1: 60, z0: -30, z1: 36 };
 
 /* ── Load ─────────────────────────────────────────────────────── */
 
@@ -113,12 +113,15 @@ const SPEED = [70, 55, 45, 38, 25, 15, 10]; // km/h, for picking routes to the b
 const roads = ways.filter((w) => tag(w, 'highway') in ROAD_CLASS && tag(w, 'area') !== 'yes' && w.geometry.some((p) => p && inDistrict(p.lat, p.lon)));
 console.log(`${roads.length} roads`);
 
-// The street in front of the building: the nearest straight 120 m of a proper road
+// The street in front of the building: the nearest straight 120 m of an ordinary road. Not a
+// highway itself (NH66 is far wider than the modelled street), and clear of one.
+const highways = roads.filter((w) => ROAD_CLASS[tag(w, 'highway')] === 0).flatMap((w) => w.geometry.map(enu));
+const nearHighway = ([x, z]) => highways.some(([hx, hz]) => Math.abs(hx - x) < 70 && Math.abs(hz - z) < 70 && Math.hypot(hx - x, hz - z) < 70);
 function pickFrontage() {
   let best = null;
   for (const w of roads) {
     const cls = ROAD_CLASS[tag(w, 'highway')];
-    if (cls > 4) continue;
+    if (cls > 4 || cls === 0) continue;
     const pts = w.geometry.map(enu);
     // sample every 5 m along the road
     const samples = [];
@@ -140,6 +143,7 @@ function pickFrontage() {
       let dev = 0;
       for (let k = i - 12; k <= i + 12; k++) dev = Math.max(dev, Math.abs(((samples[k][0] - a[0]) * dz - (samples[k][1] - a[1]) * dx) / L));
       if (dev > 2.5) continue;
+      if (nearHighway(samples[i - 12]) || nearHighway(samples[i]) || nearHighway(samples[i + 12])) continue;
       const score = far + [0, 0, 40, 90, 250][cls];
       if (!best || score < best.score) best = { score, p: [px, pz], d: [dx / L, dz / L], way: w.id, name: tag(w, 'name') ?? '' };
     }
@@ -160,6 +164,17 @@ for (const w of ways) {
   if (Math.hypot(rx, rz) > 70) continue;
   sideCount[rx * normal[0] + rz * normal[1] > 0 ? 0 : 1]++;
 }
+// a divided highway: the other carriageway goes across the street, not under the building
+for (const w of roads) {
+  if (w.id === front.way || ROAD_CLASS[tag(w, 'highway')] > 2) continue;
+  for (const g of w.geometry) {
+    const [x, z] = enu(g);
+    const rx = x - front.p[0];
+    const rz = z - front.p[1];
+    const across = rx * normal[0] + rz * normal[1];
+    if (Math.hypot(rx, rz) < 60 && Math.abs(across) < 45) sideCount[across > 0 ? 0 : 1] += 20;
+  }
+}
 const toBuilding = sideCount[0] <= sideCount[1] ? normal : [-normal[0], -normal[1]];
 // world axes: z points away from the building, x along the road (a proper rotation)
 const AZ = [-toBuilding[0], -toBuilding[1]];
@@ -174,7 +189,7 @@ const unworld = ([x, z]) => [ORIGIN[0] + x * AX[0] + z * AZ[0], ORIGIN[1] + x * 
 const W = (p) => world(enu(p));
 // which way north is in the world (for the map and the sun)
 const NORTH = [-AX[1], -AZ[1]];
-console.log(`front road: ${front.name || '(unnamed)'} way ${front.way}; north = ${NORTH.map((n) => n.toFixed(3))}`);
+console.log(`front road: ${front.name || "(unnamed)"} way ${front.way}, ${Math.round(Math.hypot(...front.p))} m from the site; north = ${NORTH.map((n) => n.toFixed(3))}`);
 
 /* ── Tiles ────────────────────────────────────────────────────── */
 
@@ -260,7 +275,7 @@ function connector([x, z]) {
   if (near(z, R.z0) && x > R.x0 + 1 && x < R.x1 - 1) {
     // round the building, not through it
     const gx = Math.abs(x) < 17 ? (x < 0 ? -17 : 17) : Math.max(-56, Math.min(56, x));
-    return { pts: [[x, z], [gx, -40], [gx, 5]], gap: { x: gx, side: 'n' } };
+    return { pts: [[x, z], [gx, -24], [gx, 5]], gap: { x: gx, side: 'n' } };
   }
   if ((near(x, R.x0) || near(x, R.x1)) && (z < 3 || z > 17)) {
     // at the ends of the modelled street: along its end to the road
@@ -716,6 +731,66 @@ for (const s of signs) {
 }
 console.log(`${nSigns} direction signs`);
 
+/* ── Roads for cabs: a graph the game routes on (public/map/roads.bin) ─────── */
+// Junctions (and dead ends) are the graph's points; each edge keeps the road's shape between
+// them. Binary, little-endian, decimetres:
+//   u32 points, u32 edges, u32 shape points
+//   points × (i32 x, i32 z)
+//   edges  × (u32 a, u32 b, u32 first shape point, u16 shape points, u8 class, u8 one-way)
+//   shape  × (i32 x, i32 z)
+const carRoads = roads.filter((w) => ROAD_CLASS[tag(w, 'highway')] <= 5 && w.nodes);
+const uses = new Map();
+for (const w of carRoads) w.nodes.forEach((n, i) => uses.set(n, (uses.get(n) ?? 0) + (i === 0 || i === w.nodes.length - 1 ? 2 : 1)));
+const vIndex = new Map();
+const verts = [];
+const vertex = (n, p) => {
+  if (!vIndex.has(n)) {
+    vIndex.set(n, verts.length / 2);
+    verts.push(dm(p[0]), dm(p[1]));
+  }
+  return vIndex.get(n);
+};
+const edges = [];
+const shape = [];
+for (const w of carRoads) {
+  const cls = ROAD_CLASS[tag(w, 'highway')];
+  const oneway = tag(w, 'oneway') === 'yes' ? 1 : 0;
+  const pts = w.geometry.map(W);
+  let start = 0;
+  for (let i = 1; i < w.nodes.length; i++) {
+    if (uses.get(w.nodes[i]) < 2 && i < w.nodes.length - 1) continue;
+    const a = vertex(w.nodes[start], pts[start]);
+    const b = vertex(w.nodes[i], pts[i]);
+    const mid = simplify(pts.slice(start, i + 1), 1.2).slice(1, -1);
+    edges.push([a, b, shape.length / 2, mid.length, cls, oneway]);
+    for (const [x, z] of mid) shape.push(dm(x), dm(z));
+    start = i;
+  }
+}
+{
+  const buf = Buffer.alloc(12 + verts.length * 4 + edges.length * 16 + shape.length * 4);
+  let o = 0;
+  buf.writeUInt32LE(verts.length / 2, o); o += 4;
+  buf.writeUInt32LE(edges.length, o); o += 4;
+  buf.writeUInt32LE(shape.length / 2, o); o += 4;
+  for (const v of verts) { buf.writeInt32LE(v, o); o += 4; }
+  for (const [a, b, f, n, c, ow] of edges) {
+    buf.writeUInt32LE(a, o); buf.writeUInt32LE(b, o + 4); buf.writeUInt32LE(f, o + 8);
+    buf.writeUInt16LE(Math.min(n, 65535), o + 12); buf.writeUInt8(c, o + 14); buf.writeUInt8(ow, o + 15);
+    o += 16;
+  }
+  for (const v of shape) { buf.writeInt32LE(v, o); o += 4; }
+  globalThis.roadsBin = buf;
+  console.log(`cab roads: ${verts.length / 2} junctions, ${edges.length} roads, ${(buf.length / 1e6).toFixed(1)} MB`);
+}
+
+// where cabs can take you
+const destinations = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'destinations.json'), 'utf8')).map((d) => {
+  if (d.home) return { n: d.n, e: d.e, x: 0, z: 12, home: 1 };
+  const [x, z] = W(d);
+  return { n: d.n, e: d.e, x: Math.round(x), z: Math.round(z) };
+});
+
 /* ── Place names ──────────────────────────────────────────────── */
 
 const places = [...elements.values()]
@@ -823,10 +898,11 @@ function png(w, h, rgba) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
 writeFileSync(join(OUT, 'overview.png'), png(IW, IH, img));
+writeFileSync(join(OUT, 'roads.bin'), globalThis.roadsBin);
 
 // roads meeting the street close together share one gap
 const mergedGaps = [];
-for (const g of gaps.sort((a, b) => a.x - b.x)) {
+for (const g of gaps.sort((a, b) => a.side.localeCompare(b.side) || a.x - b.x)) {
   const last = mergedGaps[mergedGaps.length - 1];
   if (last && last.side === g.side && g.x - g.w / 2 < last.x + last.w / 2 + 6) {
     const x0 = Math.min(last.x - last.w / 2, g.x - g.w / 2);
@@ -849,6 +925,7 @@ writeFileSync(
     tiles: list,
     places,
     gaps: mergedGaps,
+    destinations,
   })
 );
 console.log(`overview ${IW}×${IH}; done`);

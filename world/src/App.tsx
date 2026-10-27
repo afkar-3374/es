@@ -12,6 +12,8 @@ import { Atmosphere } from './world/Atmosphere';
 import { Rain } from './world/Rain';
 import { Street } from './world/Street';
 import { MapTiles } from './world/MapTiles';
+import { Cab } from './world/Cab';
+import { CabUi } from './ui/Cab';
 import { inGap, useMeta } from './world/map';
 import { Peers } from './world/Peers';
 import { Chat } from './ui/Chat';
@@ -152,6 +154,7 @@ export default function App() {
             </NearBuilding>
             {!OFF.has('vehicles') && <Vehicles />}
             {entered && <Peers />}
+            {entered && <Cab />}
             <Player start={START} startYaw={START_YAW} startPitch={START_PITCH} />
           </Physics>
           <Palms spots={palms} />
@@ -168,6 +171,7 @@ export default function App() {
       {entered && <Overlay />}
       {entered && <Chat />}
       {entered && <Minimap />}
+      {entered && <CabUi />}
       <BookReader />
       {!entered && <Intro c={c} onEnter={enter} />}
       {entered && <RotateHint />}

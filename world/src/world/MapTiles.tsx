@@ -7,7 +7,10 @@ import { applyWetness, usePBR } from './materials';
 import { noRaycast } from './merge';
 import { PLASTER } from './Neighbours';
 import { world } from './state';
-import { boxDistance, cellsPerTile, forgetTilesFarFrom, getMeta, hasTile, loadedTile, loadMeta, loadTile, onMapChange, RAIL, tileKey, waterRects, type Tile } from './map';
+import { Lamp, VirtualLight } from './Lamps';
+import { Palms, type PalmSpot } from './Palms';
+import { rng } from './layout';
+import { boxDistance, cellsPerTile, forgetTilesFarFrom, getMeta, hasTile, isWater, loadedTile, loadMeta, loadTile, onMapChange, RAIL, tileKey, waterRects, type Tile } from './map';
 
 /*
  * Kasaragod beyond the Electrosparkzz street: the real roads, buildings, rivers and sea
@@ -38,6 +41,15 @@ class Mesh {
     this.nor.push(nx, ny, nz);
     this.uv.push(u, v);
     this.col.push(c.r, c.g, c.b);
+  }
+  /** Append a whole geometry (e.g. a box), moved by `matrix`, in one colour. */
+  add(g: THREE.BufferGeometry, matrix: THREE.Matrix4, c: THREE.Color) {
+    const flat = g.index ? g.toNonIndexed() : g;
+    flat.applyMatrix4(matrix);
+    const p = flat.attributes.position;
+    const n = flat.attributes.normal;
+    const uv = flat.attributes.uv;
+    for (let i = 0; i < p.count; i++) this.vert(p.getX(i), p.getY(i), p.getZ(i), n.getX(i), n.getY(i), n.getZ(i), uv ? uv.getX(i) : 0, uv ? uv.getY(i) : 0, c);
   }
   geometry() {
     if (!this.pos.length) return null;
@@ -135,10 +147,15 @@ function buildTile(t: Tile) {
   const water = new Mesh();
   const c = new THREE.Color();
   const white = new THREE.Color('#efeee8');
+  const posts = new Mesh();
+  const heads = new Mesh();
+  const glows = new Mesh();
+  const lamps: [number, number, number][] = [];
 
   for (const r of t.data.b) {
     const [cls, w] = r;
     const pts = r.slice(3).map((v, k) => v / 10 + (k % 2 ? oz : ox));
+    if (cls <= 4) streetLamps(pts, w, cls, posts, heads, glows, lamps);
     if (cls === RAIL) {
       strip(ground, pts, w, ROAD_Y[cls], c.set('#7d7368'), 2);
       for (const side of [-0.75, 0.75]) strip(paint, pts, 0.08, ROAD_Y[cls] + 0.002, c.set('#4a4a4f'), 1, side);
@@ -219,7 +236,141 @@ function buildTile(t: Tile) {
     walls: walls.geometry(),
     roofs: roofs.geometry(),
     water: water.geometry(),
+    posts: posts.geometry(),
+    heads: heads.geometry(),
+    glows: glows.geometry(),
+    lamps,
   };
+}
+
+/** The hand-made street and its shops (they have their own lamps and palms). */
+const SITE = { x0: -64, x1: 64, z0: -34, z1: 40 };
+const inSite = (x: number, z: number) => x > SITE.x0 && x < SITE.x1 && z > SITE.z0 && z < SITE.z1;
+
+const POLE = new THREE.BoxGeometry(0.14, 7, 0.14).translate(0, 3.5, 0);
+const ARM = new THREE.BoxGeometry(1.5, 0.08, 0.08).translate(0.75, 6.9, 0);
+const HEAD = new THREE.BoxGeometry(0.62, 0.1, 0.3).translate(1.45, 6.84, 0);
+const GLOW = new THREE.PlaneGeometry(18, 18).rotateX(-Math.PI / 2);
+const STEEL = new THREE.Color('#6b7075');
+
+/** Street lights along a road: on alternate sides of big roads, one side of small ones, leaning over it. */
+function streetLamps(pts: number[], w: number, cls: number, posts: Mesh, heads: Mesh, glows: Mesh, lamps: [number, number, number][]) {
+  const every = cls <= 2 ? 30 : 42;
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const up = new THREE.Vector3(0, 1, 0);
+  let next = every / 2;
+  let walked = 0;
+  let n = 0;
+  for (let i = 2; i < pts.length; i += 2) {
+    const ax = pts[i - 2];
+    const az = pts[i - 1];
+    const dx = pts[i] - ax;
+    const dz = pts[i + 1] - az;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.01) continue;
+    while (next <= walked + len) {
+      const f = (next - walked) / len;
+      next += every;
+      const side = cls <= 2 && n++ % 2 ? -1 : 1;
+      // left of the direction of travel is (dz, -dx)… times side
+      const nx = (dz / len) * side;
+      const nz = (-dx / len) * side;
+      const px = ax + dx * f + nx * (w / 2 + 0.7);
+      const pz = az + dz * f + nz * (w / 2 + 0.7);
+      if (inSite(px, pz)) continue;
+      // the arm points back over the road
+      q.setFromAxisAngle(up, Math.atan2(nz, -nx));
+      m.compose(new THREE.Vector3(px, 0, pz), q, new THREE.Vector3(1, 1, 1));
+      posts.add(POLE, m, STEEL);
+      posts.add(ARM, m, STEEL);
+      heads.add(HEAD, m, white1);
+      const hx = px - nx * 1.45;
+      const hz = pz - nz * 1.45;
+      glows.add(GLOW, new THREE.Matrix4().makeTranslation(hx, 0.05, hz), white1);
+      lamps.push([hx, 6.7, hz]);
+    }
+    walked += len;
+  }
+}
+const white1 = new THREE.Color('#ffffff');
+
+/** Coconut palms over the open land: in groves, off the roads, clear of buildings and water. */
+function scatterPalms(t: Tile): PalmSpot[] {
+  const meta = getMeta()!;
+  const size = meta.tile;
+  const ox = t.i * size;
+  const oz = t.j * size;
+  const CELL = 40;
+  const N = size / CELL;
+  const roadsIn: number[][][] = Array.from({ length: N * N }, () => []);
+  const boxesIn: number[][][] = Array.from({ length: N * N }, () => []);
+  const mark = (list: number[][][], x0: number, z0: number, x1: number, z1: number, item: number[]) => {
+    for (let j = Math.max(0, Math.floor((z0 - oz) / CELL)); j <= Math.min(N - 1, Math.floor((z1 - oz) / CELL)); j++)
+      for (let i = Math.max(0, Math.floor((x0 - ox) / CELL)); i <= Math.min(N - 1, Math.floor((x1 - ox) / CELL)); i++) list[j * N + i].push(item);
+  };
+  for (const r of t.data.b) {
+    const reach = r[1] / 2 + 2.5;
+    for (let k = 5; k + 1 < r.length; k += 2) {
+      const ax = r[k - 2] / 10 + ox;
+      const az = r[k - 1] / 10 + oz;
+      const bx = r[k] / 10 + ox;
+      const bz = r[k + 1] / 10 + oz;
+      mark(roadsIn, Math.min(ax, bx) - reach, Math.min(az, bz) - reach, Math.max(ax, bx) + reach, Math.max(az, bz) + reach, [ax, az, bx, bz, reach]);
+    }
+  }
+  for (const [cx, cz, hx, hz, ang] of t.data.o) {
+    const x = cx / 10 + ox;
+    const z = cz / 10 + oz;
+    const r = Math.hypot(hx, hz) / 10 + 2;
+    mark(boxesIn, x - r, z - r, x + r, z + r, [x, z, hx / 10 + 1.5, hz / 10 + 1.5, ang]);
+  }
+  const rand = rng(t.i * 7919 + t.j * 104729 + 17);
+  const out: PalmSpot[] = [];
+  const STEP = 16;
+  for (let gz = 0; gz < size; gz += STEP)
+    for (let gx = 0; gx < size; gx += STEP) {
+      const x = ox + gx + rand() * STEP;
+      const z = oz + gz + rand() * STEP;
+      // groves: thick in places, sparse in others
+      const grove = (Math.sin(x / 83) + Math.sin(z / 61 + x / 140) + 2) / 4;
+      if (rand() > grove * grove * 0.75) continue;
+      if (x >= ox + size || z >= oz + size || inSite(x, z) || isWater(x, z)) continue;
+      const cell = Math.floor((z - oz) / CELL) * N + Math.floor((x - ox) / CELL);
+      const onRoad = roadsIn[cell].some(([ax, az, bx, bz, reach]) => {
+        const L2 = (bx - ax) ** 2 + (bz - az) ** 2 || 1e-9;
+        const u = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / L2));
+        return Math.hypot(x - (ax + (bx - ax) * u), z - (az + (bz - az) * u)) < reach;
+      });
+      if (onRoad) continue;
+      const inBuilding = boxesIn[cell].some(([bx, bz, hx, hz, ang]) => {
+        const c = Math.cos(ang);
+        const s = Math.sin(ang);
+        const u = (x - bx) * c + (z - bz) * s;
+        const v = -(x - bx) * s + (z - bz) * c;
+        return Math.abs(u) < hx && Math.abs(v) < hz;
+      });
+      if (inBuilding) continue;
+      out.push({ x, z, scale: 0.8 + rand() * 0.45, turn: rand() * Math.PI * 2 });
+      if (out.length >= 520) return out;
+    }
+  return out;
+}
+
+/** Lights for a tile's lamps (shared real lights go to the nearest ones at night). */
+function TileLamps({ at }: { at: [number, number, number][] }) {
+  const lights = useRef<(VirtualLight | null)[]>([]);
+  useFrame(() => {
+    const on = world.night * 30;
+    for (const l of lights.current) if (l) l.intensity = on;
+  });
+  return (
+    <>
+      {at.map((p, i) => (
+        <Lamp key={i} ref={(l) => (lights.current[i] = l)} position={p} color="#ffd9a6" distance={22} decay={1.5} intensity={0} />
+      ))}
+    </>
+  );
 }
 
 type Built = ReturnType<typeof buildTile>;
@@ -398,15 +549,19 @@ interface Mats {
   roofs: THREE.MeshStandardMaterial;
   water: THREE.MeshStandardMaterial;
   post: THREE.MeshStandardMaterial;
+  lampPost: THREE.MeshStandardMaterial;
+  lampHead: THREE.MeshStandardMaterial;
+  glow: THREE.MeshBasicMaterial;
 }
 
 function TileView({ tile, mats, near }: { tile: Tile; mats: Mats; near: boolean }) {
   const built = useMemo<Built>(() => buildTile(tile), [tile]);
   const signs = useMemo(() => (near ? buildSigns(tile) : null), [tile, near]);
+  const palms = useMemo(() => (near ? scatterPalms(tile) : []), [tile, near]);
   const boardMat = useMemo(() => (signs ? new THREE.MeshStandardMaterial({ map: signs.texture, roughness: 0.5 }) : null), [signs]);
   useEffect(
     () => () => {
-      for (const g of Object.values(built)) g?.dispose();
+      for (const g of Object.values(built)) if (g instanceof THREE.BufferGeometry) g.dispose();
     },
     [built]
   );
@@ -433,8 +588,29 @@ function TileView({ tile, mats, near }: { tile: Tile; mats: Mats; near: boolean 
           <mesh geometry={signs.boards} material={boardMat} raycast={noRaycast} />
         </>
       )}
+      {built.posts && <mesh geometry={built.posts} material={mats.lampPost} castShadow={near} raycast={noRaycast} />}
+      {built.heads && <mesh geometry={built.heads} material={mats.lampHead} raycast={noRaycast} />}
+      {built.glows && <mesh geometry={built.glows} material={mats.glow} renderOrder={1} raycast={noRaycast} />}
+      {near && built.lamps.length > 0 && <TileLamps at={built.lamps} />}
+      {palms.length > 0 && <Palms spots={palms} />}
     </group>
   );
+}
+
+/** A soft round spot, bright in the middle. */
+function glowTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  const r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  r.addColorStop(0, 'rgba(255,255,255,1)');
+  r.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+  r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r;
+  g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 /** Grass under everything, following the camera (in steps, so the texture stays put). */
@@ -507,7 +683,8 @@ function Bounds() {
 export function MapTiles() {
   const asphalt = usePBR('asphalt_02', [1, 1]);
   const plaster = usePBR('painted_plaster_wall', [1, 1], { normalScale: 0.6 });
-  const grass = usePBR('sparse_grass', [3000, 3000]);
+  // Kerala green (the texture alone reads as dry ground)
+  const grass = usePBR('sparse_grass', [3000, 3000], { tint: '#a9cf7c' });
   const mats = useMemo<Mats>(() => {
     // flat layers lie a hair apart; push the lower ones back so far roads don't flicker
     const offset = <M extends THREE.Material>(m: M, units: number) => Object.assign(m, { polygonOffset: true, polygonOffsetFactor: units, polygonOffsetUnits: units * 2 });
@@ -520,10 +697,30 @@ export function MapTiles() {
       roofs: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide }),
       water: offset(new THREE.MeshStandardMaterial({ color: '#3f8ea0', roughness: 0.12, metalness: 0.15, envMapIntensity: 1.4, side: THREE.DoubleSide }), 4),
       post: new THREE.MeshStandardMaterial({ color: '#8d9095', roughness: 0.6, metalness: 0.4 }),
+      lampPost: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.7 }),
+      lampHead: new THREE.MeshStandardMaterial({ color: '#d9dde0', emissive: '#ffe7c2', emissiveIntensity: 0, roughness: 0.3 }),
+      // a warm pool of light on the road under each lamp, at night
+      glow: offset(
+        new THREE.MeshBasicMaterial({
+          map: glowTexture(),
+          color: '#ffcf8a',
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          fog: true,
+        }),
+        -4
+      ),
     };
   }, [asphalt, plaster, grass]);
   const wetting = useMemo(() => [mats.asphalt, grass], [mats, grass]);
-  useFrame(() => applyWetness(wetting, world.wet));
+  useFrame(() => {
+    applyWetness(wetting, world.wet);
+    mats.lampHead.emissiveIntensity = world.night * 4;
+    mats.glow.opacity = world.night * 0.55;
+    mats.glow.visible = world.night > 0.02;
+  });
 
   const camera = useThree((s) => s.camera);
   const [shown, setShown] = useState<{ tile: Tile; near: boolean; solid: boolean }[]>([]);

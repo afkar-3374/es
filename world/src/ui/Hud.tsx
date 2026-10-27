@@ -9,6 +9,8 @@ import { KINDS } from '../net/net';
 import { typing } from '../player/input';
 import { quality, useQuality } from '../world/quality';
 import { useVoice, voice } from '../net/voice';
+import { bookCab } from './Cab';
+import { useCab } from '../world/cab';
 
 /** Pick a vehicle; it turns up right in front of you. */
 export function chooseVehicle() {
@@ -30,6 +32,7 @@ export function Hud({ c }: { c: Conditions }) {
   const { riding, card, book } = useUi();
   const gfx = useQuality();
   const v = useVoice();
+  const inCab = useCab().status !== 'idle';
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -69,10 +72,15 @@ export function Hud({ c }: { c: Conditions }) {
         >
           {v.mic === 'on' ? '🎙️ Mute' : v.mic === 'muted' ? '🔇 Unmute' : v.mic === 'asking' ? '🎙️ …' : '🎙️ Turn on mic'}
         </button>
-        {!riding && !card && !book && (
-          <button type="button" className="pill link" onClick={chooseVehicle} title="Call your own vehicle (V)">
-            🏍️ My vehicle
-          </button>
+        {!riding && !card && !book && !inCab && (
+          <>
+            <button type="button" className="pill link cab-pill" onClick={bookCab} title="Book a cab to anywhere in Kasaragod (C)">
+              🚕 Cab
+            </button>
+            <button type="button" className="pill link" onClick={chooseVehicle} title="Call your own vehicle (V)">
+              🏍️ My vehicle
+            </button>
+          </>
         )}
         <button
           type="button"

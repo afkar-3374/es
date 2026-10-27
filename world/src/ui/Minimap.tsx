@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BUILDING, world } from '../world/state';
 import { getMeta, loadedTile, loadMeta, RAIL, waterRects, type Tile } from '../world/map';
 import { segments } from '../world/Street';
+import { cab } from '../world/cab';
 import { me, peers } from '../net/net';
 import { typing } from '../player/input';
 
@@ -277,6 +278,29 @@ function draw(canvas: HTMLCanvasElement, view: { cx: number; cz: number; scale: 
     }
     g.fillStyle = '#fffdf8';
     g.fillRect(SITE.x0, 5, SITE.x1 - SITE.x0, 10);
+  }
+  // the cab's route, if you're riding one
+  const ride = cab.get();
+  if (ride.route && ride.status !== 'idle') {
+    const { pts, at } = ride.route;
+    g.beginPath();
+    let k = 0;
+    while (k < at.length - 1 && at[k + 1] < cab.live.done) k++;
+    g.moveTo(pts[k][0], pts[k][1]);
+    for (let i = k + 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]);
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    g.lineWidth = Math.max(9, 9 / scale);
+    g.stroke();
+    g.strokeStyle = '#2563eb';
+    g.lineWidth = Math.max(5, 5 / scale);
+    g.stroke();
+    const end = pts[pts.length - 1];
+    g.fillStyle = '#2563eb';
+    g.beginPath();
+    g.arc(end[0], end[1], Math.max(6, 7 / scale), 0, Math.PI * 2);
+    g.fill();
   }
   g.fillStyle = '#f472b6';
   const minEs = 5 / scale;
