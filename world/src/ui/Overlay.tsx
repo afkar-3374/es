@@ -88,7 +88,7 @@ export function Overlay() {
       {riding && !busy && (
         <div className="seated riding">
           <span>
-            {riding.emoji} {riding.name} · <b id="speedo">0 km/h</b> · {isTouch ? 'left thumb: drive & steer' : 'W/S: go & brake · A/D: steer'}
+            {riding.emoji} {riding.name} · <b id="speedo">0 km/h</b> · {isTouch ? (riding.id === 'car' ? 'wheel: steer · pedals: go & brake' : 'handlebar: steer · pedals: go & brake') : 'W/S: go & brake · A/D: steer'}
           </span>
           <button type="button" onClick={() => ride.honk()}>
             📯 Horn{k('H')}
