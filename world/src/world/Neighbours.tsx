@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { noRaycast } from './merge';
 import { useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { CuboidCollider, RigidBody } from '@react-three/rapier';
@@ -206,7 +207,7 @@ export function Neighbours() {
   return (
     <group>
       {meshes.map((m) => (
-        <mesh key={m.key} geometry={m.geometry} material={m.material} castShadow receiveShadow />
+        <mesh key={m.key} geometry={m.geometry} material={m.material} castShadow receiveShadow raycast={noRaycast} />
       ))}
       <RigidBody type="fixed" colliders={false}>
         {colliders.map((c, i) => (

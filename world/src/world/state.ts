@@ -32,6 +32,8 @@ export const world = {
   avatar: new THREE.Vector3(0, 0.2, 16.5),
   /** Your own vehicle, if you've called one */
   vehicle: null as null | { kind: VehicleKind; color: string; x: number; y: number; z: number; yaw: number; speed: number; ridden: boolean },
+  /** Previews only: look from here instead of your eyes */
+  freeCam: null as null | { at: THREE.Vector3; yaw: number; pitch: number },
   /** What you last said (shown over your head to others) */
   bubble: null as null | { text: string; at: number },
 };

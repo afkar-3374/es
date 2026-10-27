@@ -7,6 +7,7 @@ import { ride } from '../world/ride';
 import { SPECS } from '../world/vehicleModels';
 import { KINDS } from '../net/net';
 import { typing } from '../player/input';
+import { quality, useQuality } from '../world/quality';
 
 /** Pick a vehicle; it turns up right in front of you. */
 export function chooseVehicle() {
@@ -26,6 +27,7 @@ export function Hud({ c }: { c: Conditions }) {
   const [on, setOn] = useState(music.playing);
   const { roster, status } = useNet();
   const { riding, card, book } = useUi();
+  const gfx = useQuality();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -57,6 +59,14 @@ export function Hud({ c }: { c: Conditions }) {
             🛵 My vehicle
           </button>
         )}
+        <button
+          type="button"
+          className="pill link"
+          title="Graphics: Auto adjusts to keep things smooth; Fast for older devices; Pretty for strong ones"
+          onClick={() => quality.setMode(gfx.mode === 'auto' ? 'fast' : gfx.mode === 'fast' ? 'pretty' : 'auto')}
+        >
+          ⚙️ {gfx.mode === 'auto' ? 'Auto' : gfx.mode === 'fast' ? 'Fast' : 'Pretty'}
+        </button>
         <button
           type="button"
           className="pill link"

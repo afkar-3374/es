@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { noRaycast } from './merge';
 import { useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { CuboidCollider, RigidBody } from '@react-three/rapier';
@@ -87,11 +88,11 @@ export function Beach() {
     const solid: THREE.BufferGeometry[] = [];
     const cloth: THREE.BufferGeometry[] = [];
     const solids: { x: number; y: number; z: number; w: number; h: number; d: number }[] = [];
-    // low sea wall along the promenade, with openings down to the sand every 30 m
+    // a low kerb along the promenade: low enough to step (or drive) over onto the sand
     for (let z = BOUNDS.minZ; z < BOUNDS.maxZ; z += 30) {
       const len = 26;
-      solid.push(box(0.35, 0.5, len, BEACH.sandTop + 0.17, 0.25, z + len / 2, '#c9c2b4'));
-      solids.push({ x: BEACH.sandTop + 0.17, y: 0.25, z: z + len / 2, w: 0.35, h: 0.5, d: len });
+      solid.push(box(0.35, 0.26, len, BEACH.sandTop + 0.17, 0.13, z + len / 2, '#c9c2b4'));
+      solids.push({ x: BEACH.sandTop + 0.17, y: 0.13, z: z + len / 2, w: 0.35, h: 0.26, d: len });
     }
     // fishing boats (vallam), pulled up on the sand
     for (const b of BOATS) {
@@ -159,12 +160,12 @@ export function Beach() {
 
   return (
     <group>
-      <mesh geometry={sand.g} material={sand.mat} receiveShadow />
+      <mesh geometry={sand.g} material={sand.mat} receiveShadow raycast={noRaycast} />
       <mesh rotation-x={-Math.PI / 2} position={[(BEACH.sandTop + BEACH.promenade) / 2, 0.02, (Z0 + Z1) / 2]} material={promenade} receiveShadow>
         <planeGeometry args={[BEACH.promenade - BEACH.sandTop, Z1 - Z0]} />
       </mesh>
-      <mesh geometry={props.solid} material={mats.solid} castShadow receiveShadow />
-      <mesh geometry={props.cloth} material={mats.cloth} castShadow />
+      <mesh geometry={props.solid} material={mats.solid} castShadow receiveShadow raycast={noRaycast} />
+      <mesh geometry={props.cloth} material={mats.cloth} castShadow raycast={noRaycast} />
       <Sea />
 
       <RigidBody type="fixed" colliders={false}>
@@ -214,10 +215,18 @@ function Sea() {
     const water = new THREE.MeshStandardMaterial({ color: '#1d6f7c', roughness: 0.08, metalness: 0.25, normalMap: ripples, normalScale: new THREE.Vector2(0.6, 0.6), transparent: true, opacity: 0.9, envMapIntensity: 1.4 });
     const foamTex = canvasTexture(64, 512, (g) => {
       g.clearRect(0, 0, 64, 512);
-      for (let i = 0; i < 900; i++) {
-        g.fillStyle = `rgba(255,255,255,${0.2 + Math.random() * 0.5})`;
-        const x = Math.pow(Math.random(), 1.6) * 64;
-        g.fillRect(x, Math.random() * 512, 2 + Math.random() * 6, 2 + Math.random() * 4);
+      // soft bubbly lace, thickest at the water's edge
+      for (let i = 0; i < 700; i++) {
+        const x = Math.pow(Math.random(), 1.8) * 64;
+        const y = Math.random() * 512;
+        const r = 2 + Math.random() * 5;
+        const grad = g.createRadialGradient(x, y, 0, x, y, r);
+        grad.addColorStop(0, `rgba(255,255,255,${0.25 + Math.random() * 0.35})`);
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = grad;
+        g.beginPath();
+        g.arc(x, y, r, 0, Math.PI * 2);
+        g.fill();
       }
     }, [1, 40]);
     const foam = new THREE.MeshBasicMaterial({ map: foamTex, transparent: true, opacity: 0.8, depthWrite: false });
@@ -233,15 +242,15 @@ function Sea() {
     if (foamMesh.current) {
       const x = BEACH.waterline + wave * 3;
       foamMesh.current.position.set(x, sandHeight(x) + 0.03, (Z0 + Z1) / 2);
-      foam.opacity = 0.35 + (1 - wave) * 0.45;
+      foam.opacity = 0.25 + (1 - wave) * 0.35;
     }
     foamTex.offset.y = t * 0.01;
   });
 
   return (
     <group>
-      <mesh rotation-x={-Math.PI / 2} position={[BEACH.waterline - 800, SEA_LEVEL, (Z0 + Z1) / 2]} material={water} receiveShadow>
-        <planeGeometry args={[1600, 2600]} />
+      <mesh rotation-x={-Math.PI / 2} position={[BEACH.waterline - 3000, SEA_LEVEL, (Z0 + Z1) / 2]} material={water} receiveShadow raycast={noRaycast}>
+        <planeGeometry args={[6000, 8000]} />
       </mesh>
       <mesh ref={(m) => (foamMesh.current = m)} rotation={[-Math.PI / 2, -SLOPE, 0]} material={foam}>
         <planeGeometry args={[8, Z1 - Z0]} />

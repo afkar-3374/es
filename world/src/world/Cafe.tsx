@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Lamp, VirtualLight } from './Lamps';
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox, Text } from '@react-three/drei';
@@ -132,7 +133,7 @@ function PendingCup() {
     if (group.current) group.current.visible = performance.now() < baristaBusy.until;
   });
   return (
-    <group ref={group} position={[COUNTER_X + 0.15, FLOOR + 1.055, (Z0 + Z1) / 2]} visible={false}>
+    <group ref={group} position={[COUNTER_X + 0.15, FLOOR + 1.055, (Z0 + Z1) / 2]} visible={false} userData={{ keep: true }}>
       <Cup kind="coffee" level={1} />
     </group>
   );
@@ -375,7 +376,7 @@ function BistroTable({ x, z }: { x: number; z: number }) {
 function CafeLights() {
   const shade = useMemo(() => new THREE.MeshStandardMaterial({ color: '#2f6f73', roughness: 0.4, metalness: 0.3, side: THREE.DoubleSide }), []);
   const bulb = useMemo(() => new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#ffcf8a', emissiveIntensity: 2.2, toneMapped: false }), []);
-  const light = useRef<THREE.PointLight>(null);
+  const light = useRef<VirtualLight>(null);
   useFrame(() => {
     if (light.current) light.current.intensity = 3.5 + world.night * 3;
   });
@@ -395,7 +396,7 @@ function CafeLights() {
           </mesh>
         </group>
       ))}
-      <pointLight ref={light} position={[COUNTER_X, FLOOR + 2.4, -2.55]} color="#ffd29a" distance={6} decay={1.6} />
+      <Lamp ref={light} position={[COUNTER_X, FLOOR + 2.4, -2.55]} color="#ffd29a" distance={6} decay={1.6} />
     </group>
   );
 }

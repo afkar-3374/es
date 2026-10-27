@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import { noRaycast } from './merge';
 import { useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { CuboidCollider, RigidBody } from '@react-three/rapier';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { usePBR } from './materials';
+import { canvasTexture, usePBR } from './materials';
 import { world } from './state';
 import { box, buildLot, gableRoof, makeLots, PLASTER, type Kind, type Lot } from './Neighbours';
 import { PLACES, roadById, rng, type Road } from './layout';
@@ -203,7 +204,19 @@ export function planTown() {
   ];
   blocks.forEach(([x0, x1, z0, z1], i) => grove(500 + i, x0, x1, z0, z1, i >= 6 ? 15 : 11, palms));
 
-  return { groups, solids, palms };
+  // rough grass under the groves (UVs in metres)
+  const lawns = mergeGeometries(
+    blocks.map(([x0, x1, z0, z1]) => {
+      const g = new THREE.PlaneGeometry(x1 - x0 + 4, z1 - z0 + 4);
+      g.rotateX(-Math.PI / 2);
+      g.translate((x0 + x1) / 2, 0.004, (z0 + z1) / 2);
+      const uv = g.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * (x1 - x0 + 4)) / 5, (uv.getY(i) * (z1 - z0 + 4)) / 5);
+      return g;
+    })
+  )!;
+
+  return { groups, solids, palms, lawns };
 }
 
 export const TOWN = planTown();
@@ -231,6 +244,8 @@ export function Town() {
     return { meshes, litMat };
   }, [plasterTex, shutterTex, roofTex]);
 
+  // the grass texture's own colour is a dry brown: keep its bumps, paint it green
+  const lawn = useMemo(() => new THREE.MeshStandardMaterial({ color: '#7fae58', normalMap: grass.normalMap, roughnessMap: grass.roughnessMap, roughness: 1 }), [grass]);
   useFrame(() => {
     litMat.emissiveIntensity = world.night * 1.6;
   });
@@ -238,13 +253,14 @@ export function Town() {
   return (
     <group>
       {meshes.map((m) => (
-        <mesh key={m.key} geometry={m.geometry} material={m.material} castShadow receiveShadow />
+        <mesh key={m.key} geometry={m.geometry} material={m.material} castShadow receiveShadow raycast={noRaycast} />
       ))}
       <RigidBody type="fixed" colliders={false}>
         {TOWN.solids.map((c, i) => (
           <CuboidCollider key={i} args={[c.w / 2, c.h / 2, c.d / 2]} position={[c.x, c.h / 2, c.z]} />
         ))}
       </RigidBody>
+      <mesh geometry={TOWN.lawns} material={lawn} receiveShadow raycast={noRaycast} />
       <FootballGround grass={grass} />
       <Market />
     </group>
@@ -259,18 +275,18 @@ function FootballGround({ grass }: { grass: THREE.MeshStandardMaterial }) {
   const d = g.z1 - g.z0;
   const cx = (g.x0 + g.x1) / 2;
   const cz = (g.z0 + g.z1) / 2;
+  // a well-kept pitch: mowing stripes, with the grass texture's bumps for detail
   const turf = useMemo(() => {
-    const m = grass.clone();
-    for (const key of ['map', 'normalMap', 'roughnessMap'] as const) {
-      const t = grass[key];
-      if (t) {
-        m[key] = t.clone();
-        m[key]!.repeat.set(w / 3, d / 3);
-        m[key]!.needsUpdate = true;
+    const stripes = canvasTexture(256, 16, (g) => {
+      for (let i = 0; i < 8; i++) {
+        g.fillStyle = i % 2 ? '#6fa64a' : '#7cb555';
+        g.fillRect(i * 32, 0, 32, 16);
       }
-    }
-    m.color.set('#b9d79a');
-    return m;
+    });
+    const normal = grass.normalMap!.clone();
+    normal.repeat.set(w / 3, d / 3);
+    normal.needsUpdate = true;
+    return new THREE.MeshStandardMaterial({ map: stripes, normalMap: normal, roughness: 0.95 });
   }, [grass, w, d]);
   const chalk = useMemo(() => new THREE.MeshBasicMaterial({ color: '#f4f4ee' }), []);
   const post = useMemo(() => new THREE.MeshStandardMaterial({ color: '#f7f7f2', roughness: 0.4 }), []);

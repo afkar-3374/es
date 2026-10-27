@@ -1,11 +1,13 @@
 import * as THREE from 'three';
-import { useMemo, useRef } from 'react';
+import { Lamp, VirtualLight } from './Lamps';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import { CuboidCollider, RigidBody } from '@react-three/rapier';
 import { canvasTexture, glassMaterial, usePBR } from './materials';
 import { ui, type Book, type Interactable } from './interact';
 import { BUILDING, world } from './state';
+import { mergeStatic } from './merge';
 import { STAIRWELL } from './Building';
 import { seatInteract } from './seats';
 
@@ -221,7 +223,7 @@ function Cupboard({ side, z, featured, seed }: { side: -1 | 1; z: number; featur
   );
 
   const door = (sign: -1 | 1) => (
-    <group ref={sign === -1 ? leftDoor : rightDoor} position={[sign * (CW / 2 - 0.02), CH / 2, CD / 2 + 0.01]}>
+    <group ref={sign === -1 ? leftDoor : rightDoor} position={[sign * (CW / 2 - 0.02), CH / 2, CD / 2 + 0.01]} userData={featured ? { keep: true } : undefined}>
       <group position={[-sign * (CW / 4 - 0.01), 0, 0]}>
         <mesh material={glass}>
           <boxGeometry args={[CW / 2 - 0.12, CH - 0.2, 0.012]} />
@@ -245,9 +247,13 @@ function Cupboard({ side, z, featured, seed }: { side: -1 | 1; z: number; featur
     </group>
   );
 
+  // the cupboard's still parts become a few draw calls (the featured doors still swing)
+  const inner = useRef<THREE.Group>(null);
+  useLayoutEffect(() => (inner.current ? mergeStatic(inner.current) : undefined), []);
+
   return (
     <group position={[x, FLOOR, z]} rotation-y={facing}>
-      <group userData={featured ? undefined : { interact: lockedInfo }}>
+      <group ref={inner} userData={featured ? undefined : { interact: lockedInfo }}>
         {/* carcass */}
         <mesh position={[0, CH / 2, -CD / 2 + 0.01]} material={back}>
           <boxGeometry args={[CW, CH, 0.02]} />
@@ -303,12 +309,9 @@ function Cupboard({ side, z, featured, seed }: { side: -1 | 1; z: number; featur
 /** The open cupboard: a spotlight, an "open" plaque and the four books face-out. */
 function FeaturedShelf() {
   const plaque = useMemo(() => new THREE.MeshStandardMaterial({ color: '#2b2238', roughness: 0.3, metalness: 0.4 }), []);
-  const spot = useRef<THREE.SpotLight>(null);
-  const target = useMemo(() => new THREE.Object3D(), []);
   return (
     <group>
-      <primitive object={target} position={[0, 1.2, 0]} />
-      <spotLight ref={spot} position={[0, CH + 1.0, 1.6]} target={target} angle={0.55} penumbra={0.6} intensity={6} distance={7} decay={1.8} color="#ffe2b8" castShadow={false} />
+      <Lamp position={[0, CH + 0.4, 1.2]} intensity={5} distance={6} decay={1.8} color="#ffe2b8" />
       <mesh position={[0, CH + 0.18, CD / 2 - 0.05]} material={plaque}>
         <boxGeometry args={[0.9, 0.26, 0.03]} />
       </mesh>
@@ -526,14 +529,14 @@ function Pendants() {
   const spots = useMemo(() => [[-5.5, -4], [5.5, -4], [-5.5, -11], [5.5, -11], [0, -3], [-5.5, -17], [5.5, -17]], []);
   const shade = useMemo(() => new THREE.MeshStandardMaterial({ color: '#2a2a2e', roughness: 0.4, metalness: 0.6, side: THREE.DoubleSide }), []);
   const bulb = useMemo(() => new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#ffd59a', emissiveIntensity: 2.5, toneMapped: false }), []);
-  const lights = useRef<(THREE.PointLight | null)[]>([]);
+  const lights = useRef<(VirtualLight | null)[]>([]);
   useFrame(() => {
     lights.current.forEach((l) => l && (l.intensity = 5 + world.night * 5));
   });
   return (
     <group>
       {/* one soft fill for the back half of the room */}
-      <pointLight ref={(l) => (lights.current[2] = l)} position={[0, CEIL - 1.4, -13]} color="#ffdcae" distance={16} decay={1.3} />
+      <Lamp ref={(l) => (lights.current[2] = l)} position={[0, CEIL - 1.4, -13]} color="#ffdcae" distance={16} decay={1.3} />
       {spots.map(([x, z], i) => (
         <group key={i} position={[x, CEIL, z]}>
           <mesh position={[0, -0.5, 0]}>
@@ -546,7 +549,7 @@ function Pendants() {
           <mesh position={[0, -1.17, 0]} material={bulb}>
             <sphereGeometry args={[0.06, 12, 8]} />
           </mesh>
-          {i < 2 && <pointLight ref={(l) => (lights.current[i] = l)} position={[0, -1.3, 0]} color="#ffdcae" distance={11} decay={1.5} />}
+          {i < 2 && <Lamp ref={(l) => (lights.current[i] = l)} position={[0, -1.3, 0]} color="#ffdcae" distance={11} decay={1.5} />}
         </group>
       ))}
     </group>

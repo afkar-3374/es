@@ -1,10 +1,12 @@
 import * as THREE from 'three';
-import { useMemo, useRef } from 'react';
+import { Lamp, VirtualLight } from './Lamps';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { CuboidCollider, RigidBody } from '@react-three/rapier';
 import { applyWetness, canvasTexture, usePBR } from './materials';
 import { world } from './state';
 import { junctions, roadById } from './layout';
+import { mergeStatic } from './merge';
 
 /*
  * Street layout (metres). The street runs east–west along X.
@@ -16,7 +18,7 @@ export const ROAD = { north: 5, south: 15, centre: 10, length: 410 };
 export const FOOTPATH_H = 0.16;
 
 /** The footpaths stop where the avenues cross and at the coast and ring roads. */
-const SEGMENTS: [number, number][] = (() => {
+export const SEGMENTS: [number, number][] = (() => {
   const cuts = junctions(roadById('main')).map((j) => [j.at - j.half - 0.5, j.at + j.half + 0.5]).sort((a, b) => a[0] - b[0]);
   const out: [number, number][] = [];
   let x = -ROAD.length / 2;
@@ -162,18 +164,22 @@ function Poles() {
     }
     return new THREE.BufferGeometry().setFromPoints(pts);
   }, [xs]);
+  const merged = useRef<THREE.Group>(null);
+  useLayoutEffect(() => (merged.current ? mergeStatic(merged.current) : undefined), []);
   return (
     <group>
-      {xs.map((x) => (
-        <group key={x} position={[x, 0, 17.6]}>
-          <mesh position={[0, 4.5, 0]} castShadow material={concrete}>
-            <boxGeometry args={[0.22, 9, 0.18]} />
-          </mesh>
-          <mesh position={[0, 8.4, 0]} castShadow material={concrete}>
-            <boxGeometry args={[1.4, 0.1, 0.12]} />
-          </mesh>
-        </group>
-      ))}
+      <group ref={merged}>
+        {xs.map((x) => (
+          <group key={x} position={[x, 0, 17.6]}>
+            <mesh position={[0, 4.5, 0]} castShadow material={concrete}>
+              <boxGeometry args={[0.22, 9, 0.18]} />
+            </mesh>
+            <mesh position={[0, 8.4, 0]} castShadow material={concrete}>
+              <boxGeometry args={[1.4, 0.1, 0.12]} />
+            </mesh>
+          </group>
+        ))}
+      </group>
       <lineSegments geometry={wires}>
         <lineBasicMaterial color="#222" />
       </lineSegments>
@@ -191,14 +197,16 @@ function StreetLights() {
   const xs = useMemo(() => [-60, -36, -18, 18, 36, 60], []);
   const metal = useMemo(() => new THREE.MeshStandardMaterial({ color: '#5d6166', roughness: 0.45, metalness: 0.7 }), []);
   const lampMat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#d9dde0', emissive: '#ffe7c2', emissiveIntensity: 0, roughness: 0.3 }), []);
-  const lights = useRef<(THREE.PointLight | null)[]>([]);
+  const lights = useRef<(VirtualLight | null)[]>([]);
   useFrame(() => {
     const on = world.night;
     lampMat.emissiveIntensity = on * 4;
     lights.current.forEach((l) => l && (l.intensity = on * 38));
   });
+  const merged = useRef<THREE.Group>(null);
+  useLayoutEffect(() => (merged.current ? mergeStatic(merged.current) : undefined), []);
   return (
-    <group>
+    <group ref={merged}>
       {xs.map((x, i) => (
         <group key={x} position={[x, 0, 4.5]}>
           <mesh position={[0, 4, 0]} castShadow material={metal}>
@@ -210,8 +218,8 @@ function StreetLights() {
           <mesh position={[0, 7.85, 1.6]} material={lampMat}>
             <boxGeometry args={[0.35, 0.08, 0.7]} />
           </mesh>
-          {/* only the lamps by the building really light the street; the rest just glow (cheaper) */}
-          {Math.abs(x) <= 18 && <pointLight ref={(l) => (lights.current[i] = l)} position={[0, 7.4, 1.6]} color="#ffd9a6" distance={24} decay={1.5} intensity={0} />}
+          {/* every lamp can light the street; the nearest ones borrow the shared lights */}
+          {<Lamp ref={(l) => (lights.current[i] = l)} position={[0, 7.4, 1.6]} color="#ffd9a6" distance={24} decay={1.5} intensity={0} />}
         </group>
       ))}
       <RigidBody type="fixed" colliders={false}>

@@ -1,6 +1,12 @@
 import * as THREE from 'three';
-import { Suspense, useCallback, useEffect, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { Preload } from '@react-three/drei';
+import { QualityControl } from './world/QualityControl';
+import { useQuality } from './world/quality';
+import { LampPool } from './world/Lamps';
+import { Merged } from './world/Merged';
+import { Pedestrians } from './world/Pedestrians';
 import { Physics } from '@react-three/rapier';
 import { useConditions } from './env/useConditions';
 import { Atmosphere } from './world/Atmosphere';
@@ -33,7 +39,7 @@ import { Intro } from './ui/Intro';
 import { TouchControls } from './ui/TouchControls';
 import { Overlay } from './ui/Overlay';
 import { BookReader } from './ui/BookReader';
-import { useUi } from './world/interact';
+import { useUiValue } from './world/interact';
 import { world } from './world/state';
 import { input, isTouch } from './player/input';
 import { ride } from './world/ride';
@@ -58,6 +64,7 @@ const START_PITCH = cam && cam.length >= 5 ? cam[4] : -0.05;
 // For profiling: ?off=vehicles,cafe,corner,library,held turns parts off
 const OFF = new Set((new URLSearchParams(location.search).get('off') ?? '').split(','));
 
+const DEBUG = new URLSearchParams(location.search).has('debug');
 // For previews: ?debug exposes a way to press "use" from the console
 if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esUse: requestUse, esWorld: world, esSay: net.say, esRide: ride, esInput: input, esPeers: peers });
 
@@ -69,10 +76,24 @@ const PALMS: PalmSpot[] = [
   ...BEACH_PALMS,
 ];
 
+/** The building's insides are only drawn when you're close enough to see them. */
+function NearBuilding({ children }: { children: React.ReactNode }) {
+  const group = useRef<THREE.Group>(null);
+  // indoors the roof is in the sun's way anyway: skip all of this in the shadow pass
+  const frame = useRef(0);
+  useFrame(() => {
+    if (++frame.current % 30 === 1) group.current?.traverse((o) => (o.castShadow = false));
+    const p = world.player;
+    if (group.current) group.current.visible = Math.hypot(p.x, p.z + 10) < 75;
+  });
+  return <group ref={group}>{children}</group>;
+}
+
 export default function App() {
   const c = useConditions();
   const [entered, setEntered] = useState(false);
-  const { book } = useUi();
+  const book = useUiValue((s) => s.book);
+  const gfx = useQuality();
   // the sound of rain follows the weather (once you've entered, so audio is allowed)
   useEffect(() => {
     if (entered) music.setRain(c.weather.rain > 0.05 ? Math.min(0.3 + c.weather.rain / 4, 1) : 0);
@@ -89,11 +110,12 @@ export default function App() {
   return (
     <>
       <Canvas
-        shadows="soft"
-        dpr={[1, Math.min(window.devicePixelRatio, isTouch ? 1.5 : 2)]}
+        shadows="percentage"
+        dpr={Math.min(gfx.settings.dpr, window.devicePixelRatio || 1)}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         camera={{ fov: 70, near: 0.08, far: 1600, position: [0, 1.85, 16.5] }}
         onCreated={({ gl }) => {
+          if (DEBUG) Object.assign(window, { esGl: gl });
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 0.95;
         }}
@@ -104,27 +126,37 @@ export default function App() {
           else requestUse(0, 0);
         }}
       >
+        <QualityControl />
         <Suspense fallback={null}>
           <Atmosphere c={c} />
+          <LampPool />
           <Physics gravity={[0, -9.81, 0]}>
             <Street />
             <Roads />
             {!OFF.has('town') && <Town />}
             {!OFF.has('beach') && <Beach />}
             <Neighbours />
-            <Building />
-            <Interior />
-            <Stairs />
-            {!OFF.has('library') && <Library />}
-            {!OFF.has('corner') && <ReadingCorner />}
-            {!OFF.has('cafe') && <Cafe />}
+            <Merged>
+              <Building />
+            </Merged>
+            <NearBuilding>
+              <Merged>
+                <Interior />
+                <Stairs />
+                {!OFF.has('library') && <Library />}
+                {!OFF.has('corner') && <ReadingCorner />}
+                {!OFF.has('cafe') && <Cafe />}
+              </Merged>
+            </NearBuilding>
             {!OFF.has('vehicles') && <Vehicles c={c} />}
             {entered && <Peers />}
             <Player start={START} startYaw={START_YAW} startPitch={START_PITCH} />
           </Physics>
           <Palms spots={PALMS} />
+          {!OFF.has('people') && <Pedestrians />}
           <Interactor />
           {!OFF.has('held') && <Held />}
+          <Preload all />
           <Rain intensity={c.weather.rain > 0.05 ? Math.min(0.25 + c.weather.rain / 5, 1) : 0} wind={c.weather.wind} />
         </Suspense>
       </Canvas>

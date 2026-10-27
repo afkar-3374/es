@@ -1,11 +1,12 @@
 import * as THREE from 'three';
+import { noRaycast } from './merge';
 import { useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { CuboidCollider, RigidBody } from '@react-three/rapier';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applyWetness, usePBR } from './materials';
 import { world } from './state';
-import { BEACH, BOUNDS, ROADS, segmentsOf, type Road } from './layout';
+import { BEACH, BOUNDS, ROADS, rng, segmentsOf, type Road } from './layout';
 
 /*
  * The ground the town stands on, every road except the main street (Street.tsx draws
@@ -103,12 +104,12 @@ export function Roads() {
 
   return (
     <group>
-      <mesh geometry={geo.ground} material={soil} receiveShadow />
-      <mesh geometry={geo.roads} material={asphalt} receiveShadow />
-      <mesh geometry={geo.paint} material={mats.paint} receiveShadow />
-      <mesh geometry={geo.paths} material={paving} receiveShadow />
-      <mesh geometry={geo.poles} material={mats.metal} castShadow />
-      <mesh geometry={geo.lamps} material={mats.lamp} />
+      <mesh geometry={geo.ground} material={soil} receiveShadow raycast={noRaycast} />
+      <mesh geometry={geo.roads} material={asphalt} receiveShadow raycast={noRaycast} />
+      <mesh geometry={geo.paint} material={mats.paint} receiveShadow raycast={noRaycast} />
+      <mesh geometry={geo.paths} material={paving} receiveShadow raycast={noRaycast} />
+      <mesh geometry={geo.poles} material={mats.metal} castShadow raycast={noRaycast} />
+      <mesh geometry={geo.lamps} material={mats.lamp} raycast={noRaycast} />
       <Hills />
 
       <RigidBody type="fixed" colliders={false}>
@@ -127,9 +128,19 @@ export function Roads() {
 function Hills() {
   const geometry = useMemo(() => {
     const parts: THREE.BufferGeometry[] = [];
-    const add = (x: number, z: number, r: number, h: number) => {
-      const g = new THREE.ConeGeometry(r, h, 12, 1, true);
-      g.translate(x, h / 2 - 2, z);
+    const r = rng(77);
+    const add = (x: number, z: number, rad: number, h: number) => {
+      // a rounded, lumpy hill rather than a cone
+      const g = new THREE.SphereGeometry(1, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+      const p = g.attributes.position;
+      const seed = r() * 10;
+      for (let i = 0; i < p.count; i++) {
+        // bumps follow the position, so the sphere's seam stays closed
+        const lump = 1 + Math.sin(p.getX(i) * 4.3 + seed) * Math.cos(p.getZ(i) * 3.1 + seed) * 0.09;
+        p.setXYZ(i, p.getX(i) * rad * lump, Math.pow(p.getY(i), 1.4) * h * lump, p.getZ(i) * rad * lump);
+      }
+      g.computeVertexNormals();
+      g.translate(x, -2, z);
       parts.push(g);
     };
     for (let x = -200; x <= 320; x += 55) {
@@ -140,8 +151,8 @@ function Hills() {
     return mergeGeometries(parts.map((g) => g.toNonIndexed()))!;
   }, []);
   return (
-    <mesh geometry={geometry}>
-      <meshStandardMaterial color="#4f6b3a" roughness={1} flatShading />
+    <mesh geometry={geometry} raycast={noRaycast}>
+      <meshStandardMaterial color="#4a6a36" roughness={1} />
     </mesh>
   );
 }

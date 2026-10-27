@@ -35,6 +35,10 @@ export function usePersonSource(name: string) {
     if (fbx.userData.prepared) return fbx;
     for (const t of [tex.bodyMap, tex.headMap, tex.hairMap]) t.colorSpace = THREE.SRGBColorSpace;
     fbx.scale.setScalar(0.01); // centimetres → metres
+    // the files carry their own scene light; it would light the whole town once per person
+    const lights: THREE.Object3D[] = [];
+    fbx.traverse((o) => (o as THREE.Light).isLight && lights.push(o));
+    lights.forEach((l) => l.removeFromParent());
     fbx.traverse((o) => {
       const mesh = o as THREE.SkinnedMesh;
       if (!mesh.isMesh) return;
@@ -140,4 +144,112 @@ export const SMILE: FaceShape = [
 
 export function applyFace(bones: Bones, face: FaceShape) {
   for (const [name, axis, cm] of face) if (bones[name]) bones[name].position[axis] += cm;
+}
+
+const baked = new Map<string, THREE.Group>();
+
+/**
+ * A person frozen in one pose as plain meshes (no skeleton to update and upload every
+ * frame). Worked out once per look and pose, then shared by everyone who uses it.
+ */
+export function bakedPerson(source: THREE.Group, key: string, pose: (bones: Bones) => void): THREE.Group {
+  const id = `${source.uuid}:${key}`;
+  let template = baked.get(id);
+  if (!template) {
+    const { model, bones } = instancePerson(source);
+    pose(bones);
+    model.updateMatrixWorld(true);
+    template = new THREE.Group();
+    const skin = new THREE.Matrix4();
+    const tmp = new THREE.Matrix4();
+    const v = new THREE.Vector3();
+    const n = new THREE.Vector3();
+    model.traverse((o) => {
+      const sm = o as THREE.SkinnedMesh;
+      if (!sm.isSkinnedMesh) return;
+      sm.skeleton.update();
+      const g = sm.geometry;
+      const out = new THREE.BufferGeometry();
+      const pos = g.attributes.position;
+      const nor = g.attributes.normal;
+      const si = g.attributes.skinIndex;
+      const sw = g.attributes.skinWeight;
+      const P = new Float32Array(pos.count * 3);
+      const N = new Float32Array(pos.count * 3);
+      const bm = sm.skeleton.boneMatrices;
+      for (let i = 0; i < pos.count; i++) {
+        // the same blend of bone matrices the GPU would use for this vertex
+        skin.makeScale(0, 0, 0).elements[15] = 0;
+        for (let k = 0; k < 4; k++) {
+          const w = sw.getComponent(i, k);
+          if (!w) continue;
+          tmp.fromArray(bm, si.getComponent(i, k) * 16);
+          for (let e = 0; e < 16; e++) skin.elements[e] += tmp.elements[e] * w;
+        }
+        skin.premultiply(sm.bindMatrixInverse).multiply(sm.bindMatrix);
+        v.fromBufferAttribute(pos, i).applyMatrix4(skin);
+        P.set([v.x, v.y, v.z], i * 3);
+        if (nor) {
+          n.fromBufferAttribute(nor, i).transformDirection(skin);
+          N.set([n.x, n.y, n.z], i * 3);
+        }
+      }
+      out.setAttribute('position', new THREE.BufferAttribute(P, 3));
+      if (nor) out.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+      for (const name of ['uv', 'uv1', 'tangent']) if (g.attributes[name]) out.setAttribute(name, g.attributes[name]);
+      if (g.index) out.setIndex(g.index);
+      for (const grp of g.groups) out.addGroup(grp.start, grp.count, grp.materialIndex);
+      out.computeBoundingSphere();
+      const mesh = new THREE.Mesh(out, sm.material);
+      // keep the skinned mesh's place in the model
+      sm.matrixWorld.decompose(mesh.position, mesh.quaternion, mesh.scale);
+      mesh.applyMatrix4(new THREE.Matrix4().copy(model.matrixWorld).invert());
+      mesh.receiveShadow = true;
+      template!.add(mesh);
+    });
+    // the model's own scale (centimetres → metres) and placement
+    template.position.copy(model.position);
+    template.quaternion.copy(model.quaternion);
+    template.scale.copy(model.scale);
+    baked.set(id, template);
+  }
+  // copies share geometry and materials
+  return template.clone();
+}
+
+/** Frames in a baked walk cycle */
+export const WALK_FRAMES = 8;
+
+/** The walking pose at a point in the stride (phase 0…2π): legs and arms swing in turn. */
+export function walkPose(phase: number, amount = 1): Pose {
+  const swing = Math.sin(phase) * amount;
+  return [
+    ...STANDING,
+    ['Bip01_L_Thigh', 'z', 0.42 * swing],
+    ['Bip01_R_Thigh', 'z', -0.42 * swing],
+    ['Bip01_L_Calf', 'z', -0.5 * Math.max(0, -swing)],
+    ['Bip01_R_Calf', 'z', -0.5 * Math.max(0, swing)],
+    ['Bip01_L_UpperArm', 'z', -0.3 * swing],
+    ['Bip01_R_UpperArm', 'z', 0.3 * swing],
+  ];
+}
+
+/**
+ * A walk cycle baked into a few still frames (plus standing and sitting), so people can
+ * walk around without a skeleton. Show a frame by swapping each part's geometry.
+ */
+export function walkCycle(source: THREE.Group) {
+  const pose = (p: Pose) => (bones: Bones) => applyPose(source, bones, p);
+  const frames = Array.from({ length: WALK_FRAMES }, (_, i) => bakedPerson(source, `walk${i}`, pose(walkPose((i / WALK_FRAMES) * Math.PI * 2))));
+  const stand = bakedPerson(source, 'stand', pose(STANDING));
+  const sit = bakedPerson(source, 'sit', pose(SEATED));
+  return { frames, stand, sit };
+}
+
+/** Make `person` (a copy of one of the cycle's frames) show `frame`. */
+export function showFrame(person: THREE.Object3D, frame: THREE.Object3D) {
+  for (let i = 0; i < person.children.length; i++) {
+    const to = frame.children[i] as THREE.Mesh | undefined;
+    if (to) (person.children[i] as THREE.Mesh).geometry = to.geometry;
+  }
 }

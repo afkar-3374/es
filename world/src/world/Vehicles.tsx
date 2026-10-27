@@ -4,7 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { CuboidCollider, RigidBody, useRapier, type RapierRigidBody } from '@react-three/rapier';
 import type { Collider, KinematicCharacterController } from '@dimforge/rapier3d-compat';
 import { SPECS, setVehicleLights, VehicleModel, type VehicleKind } from './vehicleModels';
-import { applyPose, instancePerson, SEATED, usePersonSource } from './people';
+import { applyPose, bakedPerson, SEATED, usePersonSource } from './people';
 import { ui, type Interactable } from './interact';
 import { world } from './state';
 import { junctions, roadById } from './layout';
@@ -102,14 +102,33 @@ export function Vehicles({ c }: { c: Conditions }) {
       if (ui.get().riding) return ui.toast('Get off first, then call another vehicle.');
       const p = world.player;
       const h = world.heading;
-      const fwd = { x: -Math.sin(h), y: 0, z: -Math.cos(h) };
-      let d = 3.2;
-      const hit = physics.castRay(new rapier.Ray({ x: p.x, y: p.y + 0.6, z: p.z }, fwd), 5, true, undefined, undefined, undefined, undefined, (col) => col.parent()?.bodyType() === rapier.RigidBodyType.Fixed);
-      if (hit) d = Math.min(d, hit.timeOfImpact - 1.4);
-      if (d < 1.2) return ui.toast('No room here. Step back from the wall and try again.');
+      const fwd = { x: -Math.sin(h), z: -Math.cos(h) };
+      const right = { x: Math.cos(h), z: -Math.sin(h) };
+      const spec = SPECS[kind];
+      // is there room for it here? (a box the size of the vehicle, a little off the ground)
+      const free = (x: number, z: number) =>
+        !physics.intersectionWithShape(
+          { x, y: Math.max(p.y, 0) + spec.half[1] + 0.25, z },
+          new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), h + Math.PI / 2),
+          new rapier.Cuboid(spec.half[0] + 0.15, spec.half[1] - 0.2, spec.half[2] + 0.15),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          (col) => col.parent()?.bodyType() === rapier.RigidBodyType.Fixed
+        );
+      // beside you on the right, facing the way you look (so you can just ride off); else the left; else ahead
+      const spots = [
+        [right.x * 2.3 + fwd.x * 0.8, right.z * 2.3 + fwd.z * 0.8],
+        [-right.x * 2.3 + fwd.x * 0.8, -right.z * 2.3 + fwd.z * 0.8],
+        [fwd.x * (spec.half[0] + 1.6), fwd.z * (spec.half[0] + 1.6)],
+      ];
+      const spot = spots.find(([dx, dz]) => free(p.x + dx, p.z + dz));
+      if (!spot) return ui.toast('No room here. Step out somewhere more open and try again.');
       const hash = [...me.id].reduce((a, ch) => a + ch.charCodeAt(0), 0);
-      setMine((m) => ({ kind, color: PAINT[hash % PAINT.length], at: [p.x + fwd.x * d, Math.max(p.y, 0), p.z + fwd.z * d], yaw: h, n: (m?.n ?? 0) + 1 }));
-      ui.toast(`Your ${SPECS[kind].name.toLowerCase()} is here! ${SPECS[kind].emoji} Walk up and ${isTouch ? 'tap' : 'click'} it to ride.`);
+      // vehicles face +x in their own space; your heading 0 looks towards −z
+      setMine((m) => ({ kind, color: PAINT[hash % PAINT.length], at: [p.x + spot[0], Math.max(p.y, 0), p.z + spot[1]], yaw: h + Math.PI / 2, n: (m?.n ?? 0) + 1 }));
+      ui.toast(`Your ${spec.name.toLowerCase()} is here! ${spec.emoji} Walk up and ${isTouch ? 'tap' : 'click'} it to ride.`);
     };
   }, [physics, rapier]);
 
@@ -136,14 +155,17 @@ function TrafficVehicle({ index, npc, on }: { index: number; npc: Npc; on: boole
   const yaw = alongX ? (npc.dir === 1 ? 0 : Math.PI) : npc.dir === 1 ? -Math.PI / 2 : Math.PI / 2;
   const ends = [road.from + 6, road.to - 6];
   const crossings = useMemo(() => junctions(road).filter((j) => j.at > ends[0] && j.at < ends[1]), [road]);
-  const state = useRef({ s: npc.start, speed: npc.cruise, offset: 0, blocked: 0, honked: 0 });
+  const state = useRef({ s: npc.start, speed: npc.cruise, offset: 0, blocked: 0, honked: 0, shadow: true });
   const wheels = useRef<{ o: THREE.Object3D; r: number }[]>([]);
   const riderRef = useRef<THREE.Object3D>(null);
   const rot = useMemo(() => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), [yaw]);
 
   useEffect(() => {
     wheels.current = [];
-    group.current?.traverse((o) => o.userData.wheel && wheels.current.push({ o, r: o.userData.wheel }));
+    group.current?.traverse((o) => {
+      if (o.userData.wheel) wheels.current.push({ o, r: o.userData.wheel });
+      o.userData.castShadowWas = o.castShadow;
+    });
   }, []);
 
   useFrame((_, rawDt) => {
@@ -222,8 +244,14 @@ function TrafficVehicle({ index, npc, on }: { index: number; npc: Npc; on: boole
     g.rotation.y = yaw;
     // far away it's too small to see (or hidden in the fog): skip drawing it
     const far = Math.hypot(x - p.x, z - p.z);
-    g.visible = far < 140;
-    if (riderRef.current) riderRef.current.visible = far < 55;
+    g.visible = far < 120;
+    if (riderRef.current) riderRef.current.visible = far < 45;
+    // only nearby traffic casts shadows
+    const shadow = far < 45;
+    if (shadow !== st.shadow) {
+      st.shadow = shadow;
+      g.traverse((o) => (o.castShadow = shadow && !!o.userData.castShadowWas));
+    }
     for (const w of wheels.current) w.o.rotation.z -= (st.speed * dt) / w.r;
     body.current?.setNextKinematicTranslation({ x, y: spec.half[1], z });
     body.current?.setNextKinematicRotation(rot);
@@ -249,15 +277,17 @@ function TrafficVehicle({ index, npc, on }: { index: number; npc: Npc; on: boole
 /** A person riding a two-wheeler or driving an auto. */
 export function Rider({ kind }: { kind: VehicleKind }) {
   const source = usePersonSource('rider');
-  const model = useMemo(() => {
-    const { model, bones } = instancePerson(source);
-    applyPose(model, bones, SEATED);
-    model.traverse((o) => (o.castShadow = false));
-    // hands reaching a little further forward for handlebars
-    bones.Bip01_L_Forearm.rotation.z += 0.35;
-    bones.Bip01_R_Forearm.rotation.z += 0.35;
-    return model;
-  }, [source]);
+  // a rider never changes pose, so they're baked into plain meshes (much cheaper than a skeleton)
+  const model = useMemo(
+    () =>
+      bakedPerson(source, 'rider', (bones) => {
+        applyPose(source, bones, SEATED);
+        // hands reaching a little further forward for handlebars
+        bones.Bip01_L_Forearm.rotation.z += 0.35;
+        bones.Bip01_R_Forearm.rotation.z += 0.35;
+      }),
+    [source]
+  );
   const spec = SPECS[kind];
   // seated models sit 0.47 m up with their hips ~0.9 m below standing height
   const y = spec.seat - 0.92;
@@ -409,10 +439,9 @@ function MyVehicle({ kind, color, home, yaw }: { kind: VehicleKind; color: strin
     <>
       <group ref={group} position={home} rotation-y={yaw} userData={{ interact }}>
         <VehicleModel kind={kind} color={color} />
-        {/* an invisible box so the whole vehicle is easy to tap (a bicycle is mostly air) */}
-        <mesh position={[0, spec.half[1], 0]}>
+        {/* a hidden box so the whole vehicle is easy to tap (a bicycle is mostly air); rays still hit hidden meshes */}
+        <mesh position={[0, spec.half[1], 0]} visible={false}>
           <boxGeometry args={[spec.half[0] * 2, spec.half[1] * 2, spec.half[2] * 2 + 0.2]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
         </mesh>
       </group>
       <RigidBody ref={body} type="kinematicPosition" colliders={false} position={[home[0], home[1] + spec.half[1], home[2]]} rotation={[0, yaw, 0]}>

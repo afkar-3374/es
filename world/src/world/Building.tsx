@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Lamp, VirtualLight } from './Lamps';
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
@@ -49,8 +50,8 @@ export function Building() {
   const signPink = useMemo(() => new THREE.MeshStandardMaterial({ color: '#ff5d8f', emissive: '#ff4f95', emissiveIntensity: 0, toneMapped: false }), []);
   const tank = useMemo(() => new THREE.MeshStandardMaterial({ color: '#151515', roughness: 0.35 }), []);
 
-  const signLight = useRef<THREE.PointLight>(null);
-  const lobbyLights = useRef<(THREE.PointLight | null)[]>([]);
+  const signLight = useRef<VirtualLight>(null);
+  const lobbyLights = useRef<(VirtualLight | null)[]>([]);
   useFrame(() => {
     const n = world.night;
     signWhite.emissiveIntensity = 0.15 + n * 2.2;
@@ -97,7 +98,7 @@ export function Building() {
         ))
       )}
       {[-6, 6].map((x, i) => (
-        <pointLight key={x} ref={(l) => (lobbyLights.current[i] = l)} position={[x, GF_TOP - 0.5, -8]} color="#fff0dc" distance={20} decay={1.5} />
+        <Lamp key={x} ref={(l) => (lobbyLights.current[i] = l)} position={[x, GF_TOP - 0.5, -8]} color="#fff0dc" distance={20} decay={1.5} />
       ))}
 
       {/* Back and side walls (outside: plaster; inside: soft grey plaster) */}
@@ -179,7 +180,7 @@ export function Building() {
         </Text>
       </group>
       {/* lights the sign from just below the library floor, so it can't leak onto the floor inside */}
-      <pointLight ref={signLight} position={[0, 4.3, front + 1.7]} color="#ff7ab0" distance={6} decay={2} intensity={0} />
+      <Lamp ref={signLight} position={[0, 4.3, front + 1.7]} color="#ff7ab0" distance={6} decay={2} intensity={0} />
 
       {/* first floor: a tall window band (the library), almost down to its floor */}
       <mesh position={[0, 8.7, front - 0.15]} castShadow receiveShadow material={plaster}>
@@ -281,10 +282,10 @@ function SlidingDoors({ glass, frame }: { glass: THREE.Material; frame: THREE.Ma
 
   return (
     <>
-      <group ref={left} position={[DOOR_X - panelW / 2, PLINTH + 1.4, z]}>
+      <group ref={left} position={[DOOR_X - panelW / 2, PLINTH + 1.4, z]} userData={{ keep: true }}>
         {panel}
       </group>
-      <group ref={right} position={[DOOR_X + panelW / 2, PLINTH + 1.4, z]}>
+      <group ref={right} position={[DOOR_X + panelW / 2, PLINTH + 1.4, z]} userData={{ keep: true }}>
         {panel}
       </group>
       <RigidBody ref={leftBody} type="kinematicPosition" colliders={false} position={[DOOR_X - panelW / 2, PLINTH + 1.4, z]}>

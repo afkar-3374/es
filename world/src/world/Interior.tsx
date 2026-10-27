@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Lamp, VirtualLight } from './Lamps';
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text, useTexture } from '@react-three/drei';
@@ -432,7 +433,7 @@ function LibrarySign() {
 
 function ArcadeLights() {
   const panel = useMemo(() => new THREE.MeshStandardMaterial({ color: '#ffffff', emissive: '#fff3e2', emissiveIntensity: 1.3 }), []);
-  const lights = useRef<(THREE.PointLight | null)[]>([]);
+  const lights = useRef<(VirtualLight | null)[]>([]);
   useFrame(() => {
     lights.current.forEach((l) => l && (l.intensity = 7 + world.night * 4));
   });
@@ -444,7 +445,7 @@ function ArcadeLights() {
         </mesh>
       ))}
       {[[0, -7.5], [0, -16]].map(([x, z], i) => (
-        <pointLight key={i} ref={(l) => (lights.current[i] = l)} position={[x, CEIL - 0.6, z]} color="#fff0dc" distance={14} decay={1.4} />
+        <Lamp key={i} ref={(l) => (lights.current[i] = l)} position={[x, CEIL - 0.6, z]} color="#fff0dc" distance={14} decay={1.4} />
       ))}
       {[[-2.2, -15.5], [2.2, -15.5]].map(([x, z]) => (
         <mesh key={x} position={[x, CEIL - 0.03, z]} rotation-x={Math.PI / 2} material={panel}>

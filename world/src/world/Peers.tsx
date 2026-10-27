@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import { CuboidCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
-import { applyPose, instancePerson, SEATED, STANDING, usePersonSource, type Pose } from './people';
+import { showFrame, usePersonSource, walkCycle, WALK_FRAMES } from './people';
 import { SPECS, VehicleModel, type VehicleKind } from './vehicleModels';
 import { LOOKS, peers, useNet, type Peer } from '../net/net';
 import { world } from './state';
@@ -94,19 +94,19 @@ function seatOffset(kind: VehicleKind): [number, number] {
 
 function PeerPerson({ id, look, name }: { id: string; look: number; name: string }) {
   const source = usePersonSource(LOOKS[look] ?? LOOKS[0]);
-  const { model, bones } = useMemo(() => instancePerson(source), [source]);
+  // walking, standing and sitting are baked frames (no skeleton to update every frame)
+  const cycle = useMemo(() => walkCycle(source), [source]);
+  const model = useMemo(() => {
+    const m = cycle.frames[0].clone();
+    m.traverse((o) => (o.castShadow = true));
+    return m;
+  }, [cycle]);
   const group = useRef<THREE.Group>(null);
   const label = useRef<THREE.Group>(null);
   const tag = useRef<HTMLDivElement>(null);
   const bubble = useRef<HTMLDivElement>(null);
   const phase = useRef(0);
-  const posed = useRef<'walk' | 'sit' | ''>('');
   const said = useRef('');
-  const walk = useMemo<Pose>(() => [], []);
-
-  useEffect(() => {
-    model.traverse((o) => (o.castShadow = true));
-  }, [model]);
 
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 0.05);
@@ -133,29 +133,14 @@ function PeerPerson({ id, look, name }: { id: string; look: number; name: string
     const dist = Math.hypot(g.position.x - world.player.x, g.position.z - world.player.z);
     g.visible = dist < SHOW_PERSON;
 
-    // pose: sitting (in a chair or on a vehicle) or walking with swinging arms and legs
-    if (riding || p.mode === 1) {
-      if (posed.current !== 'sit') {
-        applyPose(model, bones, SEATED);
-        posed.current = 'sit';
-      }
-    } else if (g.visible) {
+    // sitting (in a chair or on a vehicle), walking, or standing still
+    if (riding || p.mode === 1) showFrame(model, cycle.sit);
+    else if (g.visible) {
       const speed = Math.min(p.speed, 5);
-      phase.current += dt * (speed > 0.2 ? 2.2 + speed * 1.6 : 0);
-      const swing = Math.min(speed / 1.4, 1) * Math.sin(phase.current);
-      const amount = speed > 0.2 ? 1 : 0;
-      walk.length = 0;
-      walk.push(
-        ...STANDING,
-        ['Bip01_L_Thigh', 'z', 0.42 * swing * amount],
-        ['Bip01_R_Thigh', 'z', -0.42 * swing * amount],
-        ['Bip01_L_Calf', 'z', -0.5 * Math.max(0, -swing) * amount],
-        ['Bip01_R_Calf', 'z', -0.5 * Math.max(0, swing) * amount],
-        ['Bip01_L_UpperArm', 'z', -0.3 * swing * amount],
-        ['Bip01_R_UpperArm', 'z', 0.3 * swing * amount]
-      );
-      applyPose(model, bones, walk);
-      posed.current = 'walk';
+      if (speed > 0.2) {
+        phase.current += dt * (2.2 + speed * 1.6);
+        showFrame(model, cycle.frames[Math.floor(((phase.current / (Math.PI * 2)) % 1) * WALK_FRAMES)]);
+      } else showFrame(model, cycle.stand);
     }
 
     // name tag and speech bubble

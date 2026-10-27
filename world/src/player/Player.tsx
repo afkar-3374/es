@@ -60,6 +60,13 @@ export function Player({ start = [0, 1.2, 16.5] as [number, number, number], sta
       input.lookPitch = 0;
     }
 
+    // previews (?debug): a free camera anywhere
+    if (world.freeCam) {
+      camera.position.copy(world.freeCam.at);
+      camera.rotation.set(world.freeCam.pitch, world.freeCam.yaw, 0, 'YXZ');
+      return;
+    }
+
     // riding a vehicle: the vehicle moves the camera; park the walker out of the way
     if (world.riding) {
       b.setNextKinematicTranslation({ x: 0, y: -40, z: 0 });

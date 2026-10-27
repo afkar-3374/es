@@ -29,7 +29,8 @@ const urls = (name: TexName) => ({
  * `tint` multiplies the colour (e.g. painted plaster in another paint colour).
  */
 export function usePBR(name: TexName, repeat: [number, number], options: { tint?: THREE.ColorRepresentation; roughness?: number; normalScale?: number } = {}) {
-  const loaded = useTexture(urls(name));
+  // useTexture hands back a new object every render (same textures inside): key on the textures
+  const loaded = useTexture(useMemo(() => urls(name), [name]));
   return useMemo(() => {
     const tex = (t: THREE.Texture, color = false) => {
       const c = t.clone();
@@ -52,7 +53,8 @@ export function usePBR(name: TexName, repeat: [number, number], options: { tint?
     material.userData.dryRoughness = material.roughness;
     material.userData.baseColor = material.color.clone();
     return material;
-  }, [loaded, repeat[0], repeat[1], options.tint, options.roughness, options.normalScale]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded.map, loaded.normalMap, loaded.roughnessMap, repeat[0], repeat[1], options.tint, options.roughness, options.normalScale]);
 }
 
 /** Outdoor ground gets shinier (wet) in the rain. */

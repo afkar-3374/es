@@ -23,7 +23,7 @@ export function Cup({ kind, level = 1, steam = true }: { kind: DrinkKind; level?
   if (kind === 'chai') {
     const h = 0.085;
     return (
-      <group>
+      <group userData={{ keep: true }}>
         <mesh position={[0, h / 2, 0]} material={glass}>
           <cylinderGeometry args={[0.032, 0.026, h, 20, 1, true]} />
         </mesh>
@@ -48,7 +48,7 @@ export function Cup({ kind, level = 1, steam = true }: { kind: DrinkKind; level?
   if (kind === 'coffee') {
     const h = 0.09;
     return (
-      <group>
+      <group userData={{ keep: true }}>
         {/* the dabarah (wide bowl) */}
         <mesh position={[0, 0.022, 0]} material={steel} castShadow>
           <cylinderGeometry args={[0.058, 0.04, 0.044, 28, 1, true]} />
@@ -82,7 +82,7 @@ export function Cup({ kind, level = 1, steam = true }: { kind: DrinkKind; level?
   // cold coffee
   const h = 0.15;
   return (
-    <group>
+    <group userData={{ keep: true }}>
       <mesh position={[0, h / 2, 0]} material={glass}>
         <cylinderGeometry args={[0.036, 0.03, h, 22, 1, true]} />
       </mesh>

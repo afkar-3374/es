@@ -94,7 +94,7 @@ export function Receptionist({ position, rotation = 0 }: { position: [number, nu
   );
 
   return (
-    <group ref={group} position={position} rotation-y={rotation}>
+    <group ref={group} position={position} rotation-y={rotation} userData={{ keep: true }}>
       <OfficeChair />
       <primitive object={model} position={[0, -SIT_DROP + 0.02, -0.02]} userData={{ interact }} />
       <RigidBody type="fixed" colliders={false}>

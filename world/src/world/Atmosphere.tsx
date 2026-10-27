@@ -4,8 +4,8 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Environment, Sky, Stars } from '@react-three/drei';
 import { skyDirection, type Conditions } from '../env/kasaragod';
 import { world } from './state';
+import { useQuality } from './quality';
 import { canvasTexture } from './materials';
-import { isTouch } from '../player/input';
 
 const lerp = THREE.MathUtils.lerp;
 const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
@@ -54,8 +54,21 @@ export function Atmosphere({ c }: { c: Conditions }) {
     world.wet += (targetWet - world.wet) * Math.min(dt * 0.15, 1);
   });
 
-  // The sun follows the visitor so shadows stay sharp nearby
+  // The sun follows the visitor so shadows stay sharp nearby (over a smaller area on slow machines)
+  const { settings } = useQuality();
   const sun = useRef<THREE.DirectionalLight>(null);
+  useEffect(() => {
+    const l = sun.current;
+    if (!l) return;
+    const b = settings.shadowBox;
+    Object.assign(l.shadow.camera, { left: -b, right: b, top: b, bottom: -b });
+    l.shadow.camera.updateProjectionMatrix();
+    if (l.shadow.mapSize.x !== settings.shadowMap) {
+      l.shadow.mapSize.set(settings.shadowMap, settings.shadowMap);
+      l.shadow.map?.dispose();
+      (l.shadow as { map: THREE.WebGLRenderTarget | null }).map = null;
+    }
+  }, [settings.shadowBox, settings.shadowMap]);
   const moon = useRef<THREE.DirectionalLight>(null);
   useFrame(() => {
     const p = world.player;
@@ -86,7 +99,7 @@ export function Atmosphere({ c }: { c: Conditions }) {
         mieDirectionalG={0.85}
       />
       <Overcast amount={Math.max(cloud * 0.75, rainy * 0.95)} color={fogColor} />
-      <Clouds cover={cloud} day={day} wind={c.weather.wind} />
+      <Clouds cover={cloud * settings.clouds} day={day} wind={c.weather.wind} />
       {day < 0.35 && cloud < 0.85 && <Stars radius={600} depth={80} count={2500} factor={6} saturation={0} fade speed={0.4} />}
 
       {/* Reflections on glass, metal and wet roads come from the same sky */}
@@ -104,11 +117,6 @@ export function Atmosphere({ c }: { c: Conditions }) {
         color={sunColor}
         intensity={sunIntensity}
         castShadow={day > 0.05}
-        shadow-mapSize={isTouch ? [1024, 1024] : [2048, 2048]}
-        shadow-camera-left={-45}
-        shadow-camera-right={45}
-        shadow-camera-top={45}
-        shadow-camera-bottom={-45}
         shadow-camera-near={1}
         shadow-camera-far={200}
         shadow-bias={-0.0004}

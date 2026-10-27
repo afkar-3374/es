@@ -31,6 +31,19 @@ Road (x −205), with the beach and the Arabian Sea to the west. `Town.tsx` fill
 Kerala houses, coconut groves, a football ground and a market, all from fixed seeds so everyone
 sees the same town. Traffic drives every road and gives way at the main street.
 
+## Smoothness
+
+- **Graphics** (⚙️ in the HUD): Auto watches the frame rate and moves between Fast (lower
+  resolution, smaller shadow area), Balanced and Pretty; built-in graphics and phones start on
+  Fast. `?quality=fast|pretty` pins it.
+- Palms are low-poly instances in 64 m tiles; far tiles aren't drawn, only near ones sway or cast
+  shadows. Vehicles, cupboards, the building and its interiors are merged into one mesh per
+  material (`mergeStatic`; parts that move, come and go or can be clicked are tagged and kept).
+- Only four real point lights exist; lamps borrow them by distance (`Lamps.tsx`), so the light
+  count never changes and shaders never recompile mid-game.
+- Riders, pedestrians and other visitors use baked poses and a baked 8-frame walk cycle instead
+  of skeletons (no per-frame bone uploads). The building's insides are hidden beyond 75 m.
+
 ## Previews
 
 These only change the view:
@@ -38,8 +51,9 @@ These only change the view:
 - `?time=19:30` — that time in Kasaragod today
 - `?weather=clear|cloudy|rain|storm|fog`
 - `?cam=x,z,yaw[,height,pitch]` — start somewhere else (height 4.5 = first floor)
-- `?off=town,beach,vehicles,cafe,corner,library,held` — turn parts off (profiling)
-- `?debug` — logs the town connection and exposes `esSay`, `esRide`, `esPeers`… on `window`
+- `?off=town,beach,people,vehicles,cafe,corner,library,held` — turn parts off (profiling)
+- `?debug` — logs the town connection and exposes `esSay`, `esRide`, `esPeers`, `esGl`… on `window`;
+  `esWorld.freeCam = { at, yaw, pitch }` looks from anywhere
 
 Time, sun and moon follow Kasaragod (12.50° N, 74.99° E); live weather comes from Open-Meteo.
 Credits: see public/CREDITS.txt.

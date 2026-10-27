@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Lamp, VirtualLight } from './Lamps';
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
@@ -194,7 +195,7 @@ function SleepingCat() {
   return (
     <group position={[5.5, FLOOR + 0.42, -1.8]} rotation-y={0.6} userData={{ interact: purr }}>
       {/* curled body */}
-      <mesh ref={body} scale={[0.24, 0.12, 0.2]} castShadow material={furMat}>
+      <mesh ref={body} scale={[0.24, 0.12, 0.2]} castShadow material={furMat} userData={{ keep: true }}>
         <sphereGeometry args={[1, 24, 16]} />
       </mesh>
       {/* head tucked in, with ears */}
@@ -259,7 +260,7 @@ function SideTable() {
 function ArcLamp() {
   const brass = useMemo(() => new THREE.MeshStandardMaterial({ color: '#b8922e', roughness: 0.3, metalness: 0.9 }), []);
   const shade = useMemo(() => new THREE.MeshStandardMaterial({ color: '#f2e6d0', emissive: '#ffcf8a', emissiveIntensity: 0.6, roughness: 0.8, side: THREE.DoubleSide }), []);
-  const light = useRef<THREE.PointLight>(null);
+  const light = useRef<VirtualLight>(null);
   const arc = useMemo(() => {
     const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, 0.05, 0), new THREE.Vector3(0.05, 2.6, 0.2), new THREE.Vector3(-0.95, 2.05, 0.75));
     return new THREE.TubeGeometry(curve, 32, 0.018, 8, false);
@@ -277,7 +278,7 @@ function ArcLamp() {
       <mesh position={[-0.95, 1.98, 0.75]} material={shade} castShadow>
         <coneGeometry args={[0.22, 0.2, 28, 1, true]} />
       </mesh>
-      <pointLight ref={light} position={[-0.95, 1.85, 0.75]} color="#ffcf8a" distance={5} decay={1.6} />
+      <Lamp ref={light} position={[-0.95, 1.85, 0.75]} color="#ffcf8a" distance={5} decay={1.6} />
       <RigidBody type="fixed" colliders={false}>
         <CylinderCollider args={[0.3, 0.2]} position={[0, 0.3, 0]} />
       </RigidBody>

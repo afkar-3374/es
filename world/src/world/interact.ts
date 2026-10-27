@@ -155,6 +155,17 @@ export function useUi(): State {
   );
 }
 
+/** Just one piece of the UI state: re-renders only when that piece changes. */
+export function useUiValue<T>(pick: (s: State) => T): T {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+    () => pick(state)
+  );
+}
+
 /** A tap/click to try, in normalised screen coordinates (−1…1). */
 export const taps: { x: number; y: number }[] = [];
 export function requestUse(x = 0, y = 0) {

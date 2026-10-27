@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { forwardRef, useMemo } from 'react';
+import { forwardRef, useLayoutEffect, useMemo, useRef } from 'react';
+import { mergeStatic } from './merge';
 import { RoundedBox } from '@react-three/drei';
 import { canvasTexture } from './materials';
 
@@ -344,8 +345,12 @@ export const Cycle = forwardRef<THREE.Group, { color: string }>(function Cycle({
 });
 
 export function VehicleModel({ kind, color }: { kind: VehicleKind; color: string }) {
-  if (kind === 'car') return <Car color={color} />;
-  if (kind === 'auto') return <Auto />;
-  if (kind === 'scooter') return <Scooter color={color} />;
-  return <Cycle color={color} />;
+  const ref = useRef<THREE.Group>(null);
+  // dozens of little parts become a handful of draw calls
+  useLayoutEffect(() => (ref.current ? mergeStatic(ref.current) : undefined), [kind, color]);
+  return (
+    <group ref={ref}>
+      {kind === 'car' ? <Car color={color} /> : kind === 'auto' ? <Auto /> : kind === 'scooter' ? <Scooter color={color} /> : <Cycle color={color} />}
+    </group>
+  );
 }
