@@ -3,7 +3,7 @@
 # the hair/lashes opacity map as .webp (colour 1024 px, normals 512 px).
 #   python3 tools/fetch-people.py <cache-dir>
 # Needs Pillow. Files come from jsDelivr's mirror of the GitHub repo (much faster), or GitHub itself.
-import json, os, sys, urllib.error, urllib.request
+import json, os, subprocess, sys, urllib.request
 from PIL import Image
 
 CACHE = sys.argv[1] if len(sys.argv) > 1 else sys.exit("usage: fetch-people.py <cache-dir>")
@@ -29,16 +29,17 @@ def get(url, path):
     if os.path.exists(path):
         return path
     print("  downloading", url.rsplit("/", 1)[-1], flush=True)
-    # jsDelivr is faster but refuses some files: then straight from GitHub
+    # jsDelivr is faster but sometimes refuses or stalls: then straight from GitHub. curl
+    # retries, picks up where it left off, and gives up on a connection that stops moving.
     for u in (url, url.replace(CDN, RAW)):
-        try:
-            req = urllib.request.Request(u, headers={"User-Agent": "electrosparkzz-town"})
-            with urllib.request.urlopen(req, timeout=900) as r, open(path + ".part", "wb") as f:
-                f.write(r.read())
-            os.rename(path + ".part", path)
-            return path
-        except urllib.error.HTTPError as e:
-            print("   ", e.code, "from", u.split("/")[2], flush=True)
+        for _ in range(3):
+            r = subprocess.run(["curl", "-fsSL", "-A", "electrosparkzz-town", "--retry", "3", "--speed-limit", "10000", "--speed-time", "40", "-C", "-", "-o", path + ".part", u])
+            if r.returncode == 0:
+                os.rename(path + ".part", path)
+                return path
+            print("    curl", r.returncode, "from", u.split("/")[2], flush=True)
+            if r.returncode == 22:  # refused (403/404): no point retrying this server
+                break
     raise SystemExit(f"could not download {url}")
 
 
