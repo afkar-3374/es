@@ -443,11 +443,12 @@ function Ground({ mat }: { mat: THREE.MeshStandardMaterial }) {
   const camera = useThree((s) => s.camera);
   useFrame(() => {
     if (!mesh.current) return;
-    mesh.current.position.set(Math.round(camera.position.x / 8) * 8, -0.02, Math.round(camera.position.z / 8) * 8);
+    mesh.current.position.set(Math.round(camera.position.x / 8) * 8, -0.03, Math.round(camera.position.z / 8) * 8);
   });
   return (
     <mesh ref={mesh} rotation-x={-Math.PI / 2} material={mat} receiveShadow raycast={noRaycast}>
-      <planeGeometry args={[12000, 12000]} />
+      {/* in 50 m squares: one huge pair of triangles loses depth precision near you and shows through the street */}
+      <planeGeometry args={[12000, 12000, 240, 240]} />
     </mesh>
   );
 }
