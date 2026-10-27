@@ -67,16 +67,24 @@ export const onMapChange = (fn: () => void) => {
 const changed = () => listeners.forEach((fn) => fn());
 
 let metaPromise: Promise<Meta | null> | null = null;
+/** Fetch meta.json (once; after a failure, a later call tries again). */
 export function loadMeta() {
   metaPromise ??= fetch(`${BASE}meta.json`)
-    .then((r) => (r.ok ? r.json() : null))
-    .then((m: Meta | null) => {
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+    .then((m: Meta) => {
       meta = m;
-      tileSet = new Set(m?.tiles ?? []);
+      tileSet = new Set(m.tiles);
       changed();
       return m;
     })
-    .catch(() => null);
+    .catch(() => {
+      // offline for a moment, or a bad response: try again in a few seconds
+      setTimeout(() => {
+        metaPromise = null;
+        loadMeta();
+      }, 4000);
+      return null;
+    });
   return metaPromise;
 }
 

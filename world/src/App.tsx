@@ -15,7 +15,7 @@ import { MapTiles } from './world/MapTiles';
 import { Peers } from './world/Peers';
 import { Chat } from './ui/Chat';
 import { Minimap } from './ui/Minimap';
-import { goLandscape, RotateHint } from './ui/Landscape';
+import { goFullscreen, keepFullscreen, RotateHint } from './ui/Landscape';
 import { net, peers, type Profile } from './net/net';
 import { voice } from './net/voice';
 import { Neighbours } from './world/Neighbours';
@@ -95,12 +95,14 @@ export default function App() {
   useEffect(() => {
     if (entered) music.setRain(c.weather.rain > 0.05 ? Math.min(0.3 + c.weather.rain / 4, 1) : 0);
   }, [entered, c.weather.rain]);
+  // once in town, stay full screen
+  useEffect(() => (entered ? keepFullscreen() : undefined), [entered]);
 
   const enter = useCallback((profile: Profile) => {
     setEntered(true);
     net.start(profile);
     voice.start();
-    goLandscape();
+    goFullscreen();
     music.setRain(world.rain);
     if (!isTouch) lockPointer();
   }, []);

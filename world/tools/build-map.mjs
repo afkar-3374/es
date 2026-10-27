@@ -704,9 +704,9 @@ for (const [k, t] of tiles) {
 }
 console.log(`${list.length} tiles, ${(bytes / 1e6).toFixed(1)} MB`);
 
-/* ── Overview image (8 m per pixel would be huge: 40 m) ───────── */
+/* ── Overview image (8 m per pixel would be huge: 24 m) ───────── */
 
-const MPP = 40;
+const MPP = 24;
 const X0 = Math.floor(minX / TILE) * TILE - TILE;
 const Z0 = Math.floor(minZ / TILE) * TILE - TILE;
 const IW = Math.ceil((maxX - X0 + 2 * TILE) / MPP);

@@ -61,7 +61,6 @@ export function Minimap() {
     if (!open || !canvas) return;
     const pointers = new Map<number, { x: number; y: number }>();
     let pinch = 0;
-    const ratio = () => canvas.width / canvas.getBoundingClientRect().width;
     const zoom = (k: number) => (view.current.scale = Math.min(4, Math.max(0.006, view.current.scale * k)));
     const down = (e: PointerEvent) => {
       canvas.setPointerCapture(e.pointerId);
@@ -75,8 +74,8 @@ export function Minimap() {
       const p = pointers.get(e.pointerId);
       if (!p) return;
       if (pointers.size === 1) {
-        view.current.cx -= ((e.clientX - p.x) * ratio()) / view.current.scale;
-        view.current.cz -= ((e.clientY - p.y) * ratio()) / view.current.scale;
+        view.current.cx -= (e.clientX - p.x) / view.current.scale;
+        view.current.cz -= (e.clientY - p.y) / view.current.scale;
       }
       p.x = e.clientX;
       p.y = e.clientY;
@@ -119,7 +118,9 @@ export function Minimap() {
       {open && (
         <div className="map-wrap" onClick={() => setOpen(false)}>
           <div className="map-card" onClick={(e) => e.stopPropagation()}>
-            <canvas ref={big} width={1000} height={860} style={{ touchAction: 'none', cursor: 'grab' }} />
+            <div className="map-view">
+              <canvas ref={big} width={1000} height={860} />
+            </div>
             <div className="map-legend">
               <span>
                 <i className="dot you" /> You
@@ -199,21 +200,32 @@ function overviewImage() {
 
 const ROAD_COLOUR = ['#f2a65a', '#f6c46a', '#fbe08a', '#fffdf8', '#fffdf8', '#fbf8f2', '#e2c9a6', '#e6ddcf', '#9a8f99'];
 
+/** `view.scale` is in screen (CSS) pixels per metre for the big map, canvas pixels for the small one. */
 function draw(canvas: HTMLCanvasElement, view: { cx: number; cz: number; scale: number }, full: boolean) {
   const g = canvas.getContext('2d')!;
-  const W = canvas.width;
-  const H = canvas.height;
+  // the big map matches its size on screen, sharp at any pixel density; sizes below are screen pixels
+  const base = full ? window.devicePixelRatio || 1 : 1;
+  if (full) {
+    const w = Math.round(canvas.clientWidth * base);
+    const h = Math.round(canvas.clientHeight * base);
+    if (w > 0 && h > 0 && (canvas.width !== w || canvas.height !== h)) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+  }
+  const W = canvas.width / base;
+  const H = canvas.height / base;
   const { cx, cz, scale } = view;
   const X = (x: number) => W / 2 + (x - cx) * scale;
   const Z = (z: number) => H / 2 + (z - cz) * scale;
   const meta = getMeta();
 
-  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.setTransform(base, 0, 0, base, 0, 0);
   g.fillStyle = '#d9e4c4';
   g.fillRect(0, 0, W, H);
 
   // world metres → pixels
-  g.setTransform(scale, 0, 0, scale, W / 2 - cx * scale, H / 2 - cz * scale);
+  g.setTransform(scale * base, 0, 0, scale * base, base * (W / 2 - cx * scale), base * (H / 2 - cz * scale));
   const img = meta && overviewImage();
   if (img && meta) {
     g.drawImage(img, meta.overview.x0, meta.overview.z0, meta.overview.w * meta.overview.mpp, meta.overview.h * meta.overview.mpp);
@@ -261,30 +273,49 @@ function draw(canvas: HTMLCanvasElement, view: { cx: number; cz: number; scale: 
   const esW = Math.max(BUILDING.maxX - BUILDING.minX, minEs);
   const esD = Math.max(BUILDING.maxZ - BUILDING.minZ, minEs);
   g.fillRect((BUILDING.minX + BUILDING.maxX) / 2 - esW / 2, (BUILDING.minZ + BUILDING.maxZ) / 2 - esD / 2, esW, esD);
-  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.setTransform(base, 0, 0, base, 0, 0);
 
-  // place names on the big map (towns always, villages closer in)
+  // labels already on the map, so new ones can keep clear of them
+  const taken: [number, number, number, number][] = [];
+  const free = (x: number, y: number, w: number, h: number) => !taken.some(([a, b, c, d]) => x - w / 2 < c && x + w / 2 > a && y - h < d && y > b);
+  const take = (x: number, y: number, w: number, h: number) => taken.push([x - w / 2, y - h, x + w / 2, y]);
+
+  // your own name goes under your arrow: keep that spot clear
+  if (full) {
+    g.font = '800 20px Nunito, sans-serif';
+    take(X(world.player.x), Z(world.player.z) + 37, g.measureText(me.name || 'You').width + 8, 24);
+  }
+
+  // place names on the big map (towns always, villages closer in); bigger places first, none on top of another
   if (full && meta) {
     g.textAlign = 'center';
-    for (const p of meta.places) {
-      const rank = p.k === 'city' || p.k === 'town' ? 0 : p.k === 'suburb' || p.k === 'village' ? 1 : 2;
+    const rankOf = (k: string) => (k === 'city' || k === 'town' ? 0 : k === 'suburb' || k === 'village' ? 1 : 2);
+    for (const p of [...meta.places].sort((a, b) => rankOf(a.k) - rankOf(b.k))) {
+      const rank = rankOf(p.k);
       if ((rank === 1 && scale < 0.03) || (rank === 2 && scale < 0.15)) continue;
       const x = X(p.x);
       const y = Z(p.z);
       if (x < -60 || x > W + 60 || y < -20 || y > H + 20) continue;
       g.font = rank === 0 ? '800 22px Nunito, sans-serif' : rank === 1 ? '700 17px Nunito, sans-serif' : '600 14px Nunito, sans-serif';
+      const tw = g.measureText(p.n).width + 8;
+      const th = rank === 0 ? 24 : rank === 1 ? 19 : 16;
+      if (!free(x, y + 4, tw, th)) continue;
+      take(x, y + 4, tw, th);
       g.lineWidth = 4;
       g.strokeStyle = 'rgba(255, 253, 248, 0.85)';
       g.strokeText(p.n, x, y);
       g.fillStyle = rank === 0 ? '#3b2f4a' : '#5b4f66';
       g.fillText(p.n, x, y);
     }
-    g.font = '800 20px Nunito, sans-serif';
-    g.lineWidth = 4;
-    g.strokeStyle = 'rgba(255, 253, 248, 0.9)';
-    g.strokeText('Electrosparkzz', X(0), Z(BUILDING.minZ) - 12);
-    g.fillStyle = '#be3c86';
-    g.fillText('Electrosparkzz', X(0), Z(BUILDING.minZ) - 12);
+    // (zoomed out, the pink square under you says it; the name would sit on yours)
+    if (scale > 0.3 || Math.hypot(world.player.x, world.player.z) * scale > 60) {
+      g.font = '800 20px Nunito, sans-serif';
+      g.lineWidth = 4;
+      g.strokeStyle = 'rgba(255, 253, 248, 0.9)';
+      g.strokeText('Electrosparkzz', X(0), Z(BUILDING.minZ) - 12);
+      g.fillStyle = '#be3c86';
+      g.fillText('Electrosparkzz', X(0), Z(BUILDING.minZ) - 12);
+    }
   }
 
   // other people
@@ -300,10 +331,18 @@ function draw(canvas: HTMLCanvasElement, view: { cx: number; cz: number; scale: 
     g.strokeStyle = '#fff';
     g.stroke();
     if (full) {
-      g.font = '700 20px Nunito, sans-serif';
+      // people standing together: stack their names instead of printing one over another
+      g.font = '700 18px Nunito, sans-serif';
       g.textAlign = 'center';
+      const tw = g.measureText(peer.name).width + 6;
+      let y = Z(z) - 14;
+      for (let k = 0; k < 6 && !free(X(x), y + 3, tw, 20); k++) y -= 20;
+      take(X(x), y + 3, tw, 20);
+      g.lineWidth = 4;
+      g.strokeStyle = 'rgba(255, 253, 248, 0.85)';
+      g.strokeText(peer.name, X(x), y);
       g.fillStyle = '#2b2238';
-      g.fillText(peer.name, X(x), Z(z) - 14);
+      g.fillText(peer.name, X(x), y);
     }
   }
   // your own vehicle, parked

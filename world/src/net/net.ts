@@ -199,7 +199,10 @@ function onState(d: Record<string, unknown>) {
     if (changed) emit();
   } else {
     peers.set(id, { id, name, look, x, y, z, yaw, mode, speed: 0, vehicle, heard: now, bubble: null });
-    addChat({ from: '', name: '', text: `${name} arrived in town 👋`, mine: false });
+    // someone back after a short silence (a slow connection, a hidden tab) isn't new
+    const away = lostAt.get(id);
+    lostAt.delete(id);
+    if (away === undefined || now - away > 120_000) addChat({ from: '', name: '', text: `${name} arrived in town 👋`, mine: false });
     emit();
     hooks.arrived(id);
   }
@@ -220,10 +223,14 @@ function onChat(d: Record<string, unknown>) {
   addChat({ from: id, name, text, mine: false });
 }
 
+/** When people last went silent (dropped quietly), so their return isn't announced as an arrival. */
+const lostAt = new Map<string, number>();
+
 function drop(id: string, quietly = false) {
   const p = peers.get(id);
   if (!p) return;
   peers.delete(id);
+  if (quietly) lostAt.set(id, performance.now());
   hooks.left(id);
   if (!quietly) addChat({ from: '', name: '', text: `${p.name} left`, mine: false });
   emit();
