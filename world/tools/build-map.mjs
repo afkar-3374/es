@@ -246,6 +246,38 @@ function simplify(pts, tol) {
   return pts.filter((_, i) => keep[i]);
 }
 
+// Roads that reach the cleared site carry on to the modelled street, through a gap left in the
+// shops and footpaths there (gaps go in meta.json for the game to leave open)
+const gaps = [];
+const near = (v, to) => Math.abs(v - to) < 1.5;
+/** A road cut off at the site's edge at (x, z): the way on to the street, or null. */
+function connector([x, z]) {
+  const R = CLEAR_ROADS;
+  if (near(z, R.z1) && x > R.x0 + 1 && x < R.x1 - 1) {
+    const gx = Math.max(-56, Math.min(56, x));
+    return { pts: [[x, z], [gx, R.z1 - 6], [gx, 15]], gap: { x: gx, side: 's' } };
+  }
+  if (near(z, R.z0) && x > R.x0 + 1 && x < R.x1 - 1) {
+    // round the building, not through it
+    const gx = Math.abs(x) < 17 ? (x < 0 ? -17 : 17) : Math.max(-56, Math.min(56, x));
+    return { pts: [[x, z], [gx, -40], [gx, 5]], gap: { x: gx, side: 'n' } };
+  }
+  if ((near(x, R.x0) || near(x, R.x1)) && (z < 3 || z > 17)) {
+    // at the ends of the modelled street: along its end to the road
+    const ex = x < 0 ? R.x0 : R.x1;
+    // (and the end shop on that side makes way)
+    return { pts: [[x, z], [ex, z < 3 ? 5 : 15]], gap: { x: x < 0 ? -56 : 56, side: z < 3 ? 'n' : 's' } };
+  }
+  return null;
+}
+const isCut = (p, w) => {
+  const R = CLEAR_ROADS;
+  const onEdge = (near(p[0], R.x0) || near(p[0], R.x1)) && p[1] > R.z0 - 1.5 && p[1] < R.z1 + 1.5 || (near(p[1], R.z0) || near(p[1], R.z1)) && p[0] > R.x0 - 1.5 && p[0] < R.x1 + 1.5;
+  // (not a way that simply ends there)
+  const ends = [w.geometry[0], w.geometry[w.geometry.length - 1]].map(W);
+  return onEdge && !ends.some((e) => Math.hypot(e[0] - p[0], e[1] - p[1]) < 0.5);
+};
+
 // Roads: split into runs per tile (each run drawn by the tile it mostly lies in)
 for (const w of roads) {
   const cls = ROAD_CLASS[tag(w, 'highway')];
@@ -253,7 +285,16 @@ for (const w of roads) {
   const lanes = Number(tag(w, 'lanes'));
   if (lanes >= 2 && cls <= 4) width = Math.max(width, lanes * 3.4);
   const bridge = tag(w, 'bridge') === 'yes' ? 1 : 0;
-  for (const piece of clipOut(w.geometry.map(W), CLEAR_ROADS)) {
+  const pieces = clipOut(w.geometry.map(W), CLEAR_ROADS);
+  for (const piece of [...pieces])
+    for (const end of [piece[0], piece[piece.length - 1]]) {
+      if (!isCut(end, w)) continue;
+      const c = connector(end);
+      if (!c) continue;
+      pieces.push(c.pts);
+      if (c.gap) gaps.push({ ...c.gap, w: Math.round(width * 10) / 10 });
+    }
+  for (const piece of pieces) {
     const pts = simplify(piece, 0.4);
     let run = [pts[0]];
     let key = null;
@@ -783,6 +824,18 @@ function png(w, h, rgba) {
 }
 writeFileSync(join(OUT, 'overview.png'), png(IW, IH, img));
 
+// roads meeting the street close together share one gap
+const mergedGaps = [];
+for (const g of gaps.sort((a, b) => a.x - b.x)) {
+  const last = mergedGaps[mergedGaps.length - 1];
+  if (last && last.side === g.side && g.x - g.w / 2 < last.x + last.w / 2 + 6) {
+    const x0 = Math.min(last.x - last.w / 2, g.x - g.w / 2);
+    const x1 = Math.max(last.x + last.w / 2, g.x + g.w / 2);
+    Object.assign(last, { x: Math.round(((x0 + x1) / 2) * 10) / 10, w: Math.round((x1 - x0) * 10) / 10 });
+  } else mergedGaps.push({ ...g, x: Math.round(g.x * 10) / 10 });
+}
+console.log(`${mergedGaps.length} ways into the street`, mergedGaps);
+
 writeFileSync(
   join(OUT, 'meta.json'),
   JSON.stringify({
@@ -795,6 +848,7 @@ writeFileSync(
     overview: { x0: X0, z0: Z0, mpp: MPP, w: IW, h: IH },
     tiles: list,
     places,
+    gaps: mergedGaps,
   })
 );
 console.log(`overview ${IW}×${IH}; done`);

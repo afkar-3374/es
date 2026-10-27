@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Preload } from '@react-three/drei';
 import { QualityControl } from './world/QualityControl';
@@ -12,6 +12,7 @@ import { Atmosphere } from './world/Atmosphere';
 import { Rain } from './world/Rain';
 import { Street } from './world/Street';
 import { MapTiles } from './world/MapTiles';
+import { inGap, useMeta } from './world/map';
 import { Peers } from './world/Peers';
 import { Chat } from './ui/Chat';
 import { Minimap } from './ui/Minimap';
@@ -70,7 +71,7 @@ if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { e
 // Coconut palms along both footpaths (not in front of the entrance)
 const PALMS: PalmSpot[] = [
   ...[-54, -44, -27, 27, 44, 54].map((x) => ({ x, z: 3.6 })),
-  ...[-50, -31, -12, 7, 26, 47].map((x) => ({ x, z: 16.9 })),
+  ...[-50, -31, -16, 13, 34, 50].map((x) => ({ x, z: 16.9 })), // (none right where people arrive: it hides the sign)
 ];
 
 /** The building's insides are only drawn when you're close enough to see them. */
@@ -91,6 +92,9 @@ export default function App() {
   const [entered, setEntered] = useState(false);
   const book = useUiValue((s) => s.book);
   const gfx = useQuality();
+  // no palm in the middle of a side road
+  const gaps = useMeta()?.gaps;
+  const palms = useMemo(() => PALMS.filter((p) => !inGap(gaps, p.z < 10 ? 'n' : 's', p.x - 1, p.x + 1)), [gaps]);
   // the sound of rain follows the weather (once you've entered, so audio is allowed)
   useEffect(() => {
     if (entered) music.setRain(c.weather.rain > 0.05 ? Math.min(0.3 + c.weather.rain / 4, 1) : 0);
@@ -150,7 +154,7 @@ export default function App() {
             {entered && <Peers />}
             <Player start={START} startYaw={START_YAW} startPitch={START_PITCH} />
           </Physics>
-          <Palms spots={PALMS} />
+          <Palms spots={palms} />
           {DEBUG && new URLSearchParams(location.search).has('poses') && <PosePreview />}
           <Interactor />
           {!OFF.has('held') && <Held />}

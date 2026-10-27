@@ -7,6 +7,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { usePBR } from './materials';
 import { world } from './state';
 import { rng } from './layout';
+import { useMeta } from './map';
 
 /*
  * The rest of the street: two- and three-storey Kerala shop-buildings with closed
@@ -148,6 +149,7 @@ export function Neighbours() {
   const shutterTex = usePBR('painted_metal_shutter', [1, 1]);
   const roofTex = usePBR('clay_roof_tiles', [1, 1]);
 
+  const gaps = useMeta()?.gaps;
   const { meshes, colliders, litMat } = useMemo(() => {
     const groups = new Map<Kind, THREE.BufferGeometry[]>();
     const add = (k: Kind, g: THREE.BufferGeometry) => {
@@ -159,9 +161,11 @@ export function Neighbours() {
 
     // north side: on both sides of the Electrosparkzz building, fronts at z = 0, as far as
     // the modelled street goes (the real town carries on past it)
-    const north = [...makeLots(11, 13.5, 58, 1), ...makeLots(12, -13.5, -58, -1)];
+    // (leaving the ways in open where real side roads join the street)
+    const skip = (side: 'n' | 's') => (gaps ?? []).filter((g) => g.side === side).map((g): [number, number] => [g.x - g.w / 2 - 2, g.x + g.w / 2 + 2]);
+    const north = [...makeLots(11, 13.5, 58, 1, skip('n')), ...makeLots(12, -13.5, -58, -1, skip('n'))];
     // south side: fronts at z = 18, facing the road
-    const south = [...makeLots(21, -58, 58, 1)];
+    const south = [...makeLots(21, -58, 58, 1, skip('s'))];
 
     for (const lot of north) {
       const parts: [Kind, THREE.BufferGeometry][] = [];
@@ -196,7 +200,7 @@ export function Neighbours() {
     };
     const meshes = [...groups.entries()].map(([k, list]) => ({ key: k, geometry: mergeGeometries(list)!, material: mats[k] }));
     return { meshes, colliders, litMat };
-  }, [plasterTex, shutterTex, roofTex]);
+  }, [plasterTex, shutterTex, roofTex, gaps]);
 
   // Some upstairs windows glow at night
   useFrame(() => {
@@ -208,7 +212,7 @@ export function Neighbours() {
       {meshes.map((m) => (
         <mesh key={m.key} geometry={m.geometry} material={m.material} castShadow receiveShadow raycast={noRaycast} />
       ))}
-      <RigidBody type="fixed" colliders={false}>
+      <RigidBody key={JSON.stringify(gaps ?? [])} type="fixed" colliders={false}>
         {colliders.map((c, i) => (
           <CuboidCollider key={i} args={[c.w / 2, c.h / 2, c.d / 2]} position={[c.x, c.h / 2, c.z]} />
         ))}

@@ -6,6 +6,7 @@ import { CuboidCollider, RigidBody } from '@react-three/rapier';
 import { applyWetness, canvasTexture, usePBR } from './materials';
 import { world } from './state';
 import { mergeStatic } from './merge';
+import { inGap, useMeta, type Gap } from './map';
 
 /*
  * Street layout (metres). The street runs east–west along X.
@@ -16,8 +17,22 @@ import { mergeStatic } from './merge';
 export const ROAD = { north: 5, south: 15, centre: 10, length: 120 };
 export const FOOTPATH_H = 0.16;
 
-/** The modelled stretch; the real road (MapTiles) carries on from both ends. */
-export const SEGMENTS: [number, number][] = [[-ROAD.length / 2, ROAD.length / 2]];
+/**
+ * The stretches of footpath on one side of the modelled street (the real road carries on
+ * from both ends), broken where real side roads join it.
+ */
+export function segments(gaps: Gap[] | undefined, side: Gap['side']): [number, number][] {
+  const out: [number, number][] = [];
+  let x = -ROAD.length / 2;
+  for (const g of (gaps ?? []).filter((g) => g.side === side).sort((a, b) => a.x - b.x)) {
+    const a = g.x - g.w / 2 - 1.5;
+    const b = g.x + g.w / 2 + 1.5;
+    if (a > x) out.push([x, a]);
+    x = Math.max(x, b);
+  }
+  if (x < ROAD.length / 2) out.push([x, ROAD.length / 2]);
+  return out.filter(([a, b]) => b - a > 1);
+}
 
 export function Street() {
   const asphalt = usePBR('asphalt_02', [ROAD.length / 6, 10 / 6]);
@@ -42,21 +57,23 @@ export function Street() {
   const wetting = useMemo(() => [asphalt, paving, paving2], [asphalt, paving, paving2]);
   useFrame(() => applyWetness(wetting, world.wet));
 
+  const gaps = useMeta()?.gaps;
+  const north = useMemo(() => segments(gaps, 'n'), [gaps]);
+  const south = useMemo(() => segments(gaps, 's'), [gaps]);
+
   // Road paint: dashed centre line, edge lines and a zebra crossing in front of the building
   const markings = useMemo(() => {
     const parts: { x: number; z: number; w: number; d: number }[] = [];
     for (let x = -ROAD.length / 2 + 6; x < ROAD.length / 2 - 8; x += 6) {
       if (Math.abs(x) < 6) continue; // no centre line across the crossing
-      if (!SEGMENTS.some(([a, b]) => x > a && x + 3 < b)) continue; // nor across junctions
       parts.push({ x: x + 1.5, z: ROAD.centre, w: 3, d: 0.12 });
     }
-    for (const [a, b] of SEGMENTS) {
-      parts.push({ x: (a + b) / 2, z: ROAD.north + 0.35, w: b - a, d: 0.12 });
-      parts.push({ x: (a + b) / 2, z: ROAD.south - 0.35, w: b - a, d: 0.12 });
-    }
+    // edge lines, broken where side roads join
+    for (const [a, b] of north) parts.push({ x: (a + b) / 2, z: ROAD.north + 0.35, w: b - a, d: 0.12 });
+    for (const [a, b] of south) parts.push({ x: (a + b) / 2, z: ROAD.south - 0.35, w: b - a, d: 0.12 });
     for (let z = ROAD.north + 0.8; z < ROAD.south - 0.6; z += 1.0) parts.push({ x: 0, z: z + 0.25, w: 4, d: 0.5 });
     return parts;
-  }, []);
+  }, [north, south]);
 
   return (
     <group>
@@ -71,29 +88,35 @@ export function Street() {
       ))}
 
       {/* Footpaths with Kerala-style black-and-white kerbs, broken where side roads join */}
-      {SEGMENTS.map(([x0, x1]) => (
-        <Footpaths key={x0} x0={x0} x1={x1} paving={paving} paving2={paving2} kerb={kerbMat} />
+      {north.map(([x0, x1]) => (
+        <Footpath key={`n${x0}`} side="n" x0={x0} x1={x1} paving={paving} kerb={kerbMat} />
+      ))}
+      {south.map(([x0, x1]) => (
+        <Footpath key={`s${x0}`} side="s" x0={x0} x1={x1} paving={paving2} kerb={kerbMat} />
       ))}
 
-      <Poles />
-      <StreetLights />
+      <Poles gaps={gaps} />
+      <StreetLights gaps={gaps} />
 
-      <RigidBody type="fixed" colliders={false}>
-        {SEGMENTS.map(([x0, x1]) => (
-          <group key={x0}>
-            <CuboidCollider args={[(x1 - x0) / 2, FOOTPATH_H / 2, 2.5]} position={[(x0 + x1) / 2, FOOTPATH_H / 2, 2.5]} />
-            <CuboidCollider args={[(x1 - x0) / 2, FOOTPATH_H / 2, 1.5]} position={[(x0 + x1) / 2, FOOTPATH_H / 2, 16.5]} />
-          </group>
+      {/* (keyed on the gaps: the colliders are made once, when they mount) */}
+      <RigidBody key={JSON.stringify(gaps ?? [])} type="fixed" colliders={false}>
+        {north.map(([x0, x1]) => (
+          <CuboidCollider key={`n${x0}`} args={[(x1 - x0) / 2, FOOTPATH_H / 2, 2.5]} position={[(x0 + x1) / 2, FOOTPATH_H / 2, 2.5]} />
+        ))}
+        {south.map(([x0, x1]) => (
+          <CuboidCollider key={`s${x0}`} args={[(x1 - x0) / 2, FOOTPATH_H / 2, 1.5]} position={[(x0 + x1) / 2, FOOTPATH_H / 2, 16.5]} />
         ))}
       </RigidBody>
     </group>
   );
 }
 
-/** One stretch of both footpaths (materials are cloned so each stretch tiles at its own length). */
-function Footpaths({ x0, x1, paving, paving2, kerb }: { x0: number; x1: number; paving: THREE.MeshStandardMaterial; paving2: THREE.MeshStandardMaterial; kerb: THREE.MeshStandardMaterial }) {
+/** One stretch of footpath on one side (materials are cloned so each stretch tiles at its own length). */
+function Footpath({ side, x0, x1, paving, kerb }: { side: Gap['side']; x0: number; x1: number; paving: THREE.MeshStandardMaterial; kerb: THREE.MeshStandardMaterial }) {
   const w = x1 - x0;
   const cx = (x0 + x1) / 2;
+  // the building's side is the 5 m forecourt, the far side a 3 m footpath
+  const [z, depth, kerbZ] = side === 'n' ? [2.5, 5, ROAD.north - 0.12] : [16.5, 3, ROAD.south + 0.12];
   const mats = useMemo(() => {
     const tiled = (m: THREE.MeshStandardMaterial) => {
       const c = m.clone();
@@ -106,35 +129,28 @@ function Footpaths({ x0, x1, paving, paving2, kerb }: { x0: number; x1: number; 
       }
       return c;
     };
-    return { a: tiled(paving), b: tiled(paving2), k: tiled(kerb) };
-  }, [paving, paving2, kerb, w]);
+    return { a: tiled(paving), k: tiled(kerb) };
+  }, [paving, kerb, w]);
   // wet with the rest
   useFrame(() => {
     mats.a.roughness = paving.roughness;
     mats.a.color.copy(paving.color);
-    mats.b.roughness = paving2.roughness;
-    mats.b.color.copy(paving2.color);
   });
   return (
     <group>
-      <mesh position={[cx, FOOTPATH_H / 2, 2.5]} receiveShadow material={mats.a}>
-        <boxGeometry args={[w, FOOTPATH_H, 5]} />
+      <mesh position={[cx, FOOTPATH_H / 2, z]} receiveShadow material={mats.a}>
+        <boxGeometry args={[w, FOOTPATH_H, depth]} />
       </mesh>
-      <mesh position={[cx, FOOTPATH_H / 2, 16.5]} receiveShadow material={mats.b}>
-        <boxGeometry args={[w, FOOTPATH_H, 3]} />
+      <mesh position={[cx, 0.11, kerbZ]} castShadow receiveShadow material={mats.k}>
+        <boxGeometry args={[w, 0.22, 0.24]} />
       </mesh>
-      {[ROAD.north - 0.12, ROAD.south + 0.12].map((z) => (
-        <mesh key={z} position={[cx, 0.11, z]} castShadow receiveShadow material={mats.k}>
-          <boxGeometry args={[w, 0.22, 0.24]} />
-        </mesh>
-      ))}
     </group>
   );
 }
 
 /** Concrete electric poles along the south footpath, with sagging wires. */
-function Poles() {
-  const xs = useMemo(() => Array.from({ length: 5 }, (_, i) => -56 + i * 28), []);
+function Poles({ gaps }: { gaps?: Gap[] }) {
+  const xs = useMemo(() => Array.from({ length: 5 }, (_, i) => -56 + i * 28).filter((x) => !inGap(gaps, 's', x, x)), [gaps]);
   const concrete = useMemo(() => new THREE.MeshStandardMaterial({ color: '#a7a39a', roughness: 0.9 }), []);
   const wires = useMemo(() => {
     const pts: THREE.Vector3[] = [];
@@ -154,7 +170,7 @@ function Poles() {
     return new THREE.BufferGeometry().setFromPoints(pts);
   }, [xs]);
   const merged = useRef<THREE.Group>(null);
-  useLayoutEffect(() => (merged.current ? mergeStatic(merged.current) : undefined), []);
+  useLayoutEffect(() => (merged.current ? mergeStatic(merged.current) : undefined), [xs]);
   return (
     <group>
       <group ref={merged}>
@@ -182,8 +198,8 @@ function Poles() {
 }
 
 /** LED street lights on the north footpath; they switch on at dusk. */
-function StreetLights() {
-  const xs = useMemo(() => [-54, -36, -18, 18, 36, 54], []);
+function StreetLights({ gaps }: { gaps?: Gap[] }) {
+  const xs = useMemo(() => [-54, -36, -18, 18, 36, 54].filter((x) => !inGap(gaps, 'n', x, x)), [gaps]);
   const metal = useMemo(() => new THREE.MeshStandardMaterial({ color: '#5d6166', roughness: 0.45, metalness: 0.7 }), []);
   const lampMat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#d9dde0', emissive: '#ffe7c2', emissiveIntensity: 0, roughness: 0.3 }), []);
   const lights = useRef<(VirtualLight | null)[]>([]);
@@ -193,7 +209,7 @@ function StreetLights() {
     lights.current.forEach((l) => l && (l.intensity = on * 38));
   });
   const merged = useRef<THREE.Group>(null);
-  useLayoutEffect(() => (merged.current ? mergeStatic(merged.current) : undefined), []);
+  useLayoutEffect(() => (merged.current ? mergeStatic(merged.current) : undefined), [xs]);
   return (
     <group ref={merged}>
       {xs.map((x, i) => (

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { BUILDING, world } from '../world/state';
 import { getMeta, loadedTile, loadMeta, RAIL, waterRects, type Tile } from '../world/map';
+import { segments } from '../world/Street';
 import { me, peers } from '../net/net';
 import { typing } from '../player/input';
 
@@ -262,9 +263,18 @@ function draw(canvas: HTMLCanvasElement, view: { cx: number; cz: number; scale: 
   }
   // the hand-made street and its shops
   if (scale > 0.25) {
+    // shop rows on both sides, open where side roads come in
     g.fillStyle = '#c9bfae';
-    g.fillRect(SITE.x0 + 2, SITE.z0, SITE.x1 - SITE.x0 - 4, 16);
-    g.fillRect(SITE.x0 + 2, 18, SITE.x1 - SITE.x0 - 4, SITE.z1 - 18);
+    for (const [a, b] of segments(meta?.gaps, 'n')) {
+      const x0 = Math.max(a, SITE.x0 + 2);
+      const x1 = Math.min(b, SITE.x1 - 2);
+      if (x1 > x0) g.fillRect(x0, SITE.z0, x1 - x0, 16);
+    }
+    for (const [a, b] of segments(meta?.gaps, 's')) {
+      const x0 = Math.max(a, SITE.x0 + 2);
+      const x1 = Math.min(b, SITE.x1 - 2);
+      if (x1 > x0) g.fillRect(x0, 18, x1 - x0, SITE.z1 - 18);
+    }
     g.fillStyle = '#fffdf8';
     g.fillRect(SITE.x0, 5, SITE.x1 - SITE.x0, 10);
   }

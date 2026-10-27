@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useProgress } from '@react-three/drei';
 import { isTouch } from '../player/input';
 import { loadProfile, LOOKS, type Profile } from '../net/net';
@@ -9,7 +9,11 @@ const LOOK_LABELS: Record<(typeof LOOKS)[number], string> = { rider: '🧢 Casua
 /** The welcome card: your name and look, loading progress, and the way in. */
 export function Intro({ c, onEnter }: { c: Conditions; onEnter: (p: Profile) => void }) {
   const { progress, active } = useProgress();
-  const ready = !active && progress >= 100;
+  // once the town is ready it stays ready (more pieces load later, e.g. the map around you)
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (!active && progress >= 100) setReady(true);
+  }, [active, progress]);
   const [profile, setProfile] = useState(loadProfile);
   return (
     <div className="intro">

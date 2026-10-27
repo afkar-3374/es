@@ -5,7 +5,7 @@ import { CuboidCollider, RigidBody, useRapier, type RapierRigidBody } from '@rea
 import type { Collider, KinematicCharacterController } from '@dimforge/rapier3d-compat';
 import { SPECS, setVehicleLights, VehicleModel, type VehicleKind } from './vehicleModels';
 import { ui, type Interactable } from './interact';
-import { world } from './state';
+import { insideBuilding, world } from './state';
 import { me } from '../net/net';
 import { isTouch } from '../player/input';
 import { input } from '../player/input';
@@ -44,7 +44,8 @@ export function Vehicles() {
           undefined,
           undefined,
           undefined,
-          (col) => col.parent()?.bodyType() === rapier.RigidBodyType.Fixed
+          // anything that doesn't move: fixed bodies, and the map's buildings (colliders without a body)
+          (col) => !col.parent() || col.parent()!.bodyType() === rapier.RigidBodyType.Fixed
         );
       // beside you on the right, facing the way you look (so you can just ride off); else the left; else ahead
       const spots = [
@@ -187,6 +188,18 @@ function MyVehicle({ kind, color, home, yaw }: { kind: VehicleKind; color: strin
     // bumped into something: lose the speed
     if (s.riding && Math.abs(s.speed) > 1 && done.x * move.x + done.z * move.z < move.x * move.x * 0.25 + move.z * move.z * 0.25) s.speed *= 0.4;
     const next = { x: t.x + done.x, y: t.y + done.y, z: t.z + done.z };
+    // vehicles stay outside the building (its doorway is wide enough to drive through)
+    const keepOut = Math.max(spec.half[0], spec.half[2]) * 0.6;
+    if (insideBuilding(next.x, next.z, keepOut) && !insideBuilding(t.x, t.z, keepOut)) {
+      next.x = t.x;
+      next.z = t.z;
+      s.speed = 0;
+    }
+    // flat town, nothing below ground (and the ground only follows you, not a parked vehicle)
+    if (next.y < spec.half[1]) {
+      next.y = spec.half[1];
+      s.fall = 0;
+    }
     b.setNextKinematicTranslation(next);
     s.pos.set(next.x, next.y - spec.half[1], next.z);
 

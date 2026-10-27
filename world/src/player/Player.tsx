@@ -130,6 +130,11 @@ export function Player({ start = [0, 1.2, 16.5] as [number, number, number], sta
     const done = c.computedMovement();
     const p = b.translation();
     const next = { x: p.x + done.x, y: p.y + done.y, z: p.z + done.z };
+    // the town is flat and nothing is below ground: never sink into it
+    if (next.y < HALF_HEIGHT + RADIUS) {
+      next.y = HALF_HEIGHT + RADIUS;
+      fall.current = 0;
+    }
     b.setNextKinematicTranslation(next);
 
     // share where you are; indoors means no rain on you

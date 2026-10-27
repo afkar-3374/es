@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from 'react';
+
 /*
  * The real map of Kasaragod district (from OpenStreetMap, made by tools/build-map.mjs):
  * meta.json says where everything is, and each 1 km tile holds its roads, buildings,
@@ -26,6 +28,16 @@ export interface Meta {
   overview: { x0: number; z0: number; mpp: number; w: number; h: number };
   tiles: string[];
   places: Place[];
+  /** where real roads join the modelled street: shops and footpaths leave these open */
+  gaps?: Gap[];
+}
+
+export interface Gap {
+  x: number;
+  /** road width */
+  w: number;
+  /** 'n': the building's side of the street, 's': across it */
+  side: 'n' | 's';
 }
 
 export interface TileData {
@@ -59,6 +71,11 @@ const pending = new Map<string, Promise<Tile | null>>();
 const listeners = new Set<() => void>();
 
 export const getMeta = () => meta;
+/** The map's meta (null until it loads); re-renders when it arrives. */
+export const useMeta = () => useSyncExternalStore(onMapChange, getMeta);
+/** Is x (on the street) inside a gap on this side, with `pad` metres to spare? */
+export const inGap = (gaps: Gap[] | undefined, side: Gap['side'], x0: number, x1: number, pad = 1.5) =>
+  !!gaps?.some((g) => g.side === side && x1 > g.x - g.w / 2 - pad && x0 < g.x + g.w / 2 + pad);
 export const loadedTile = (key: string) => loaded.get(key);
 export const onMapChange = (fn: () => void) => {
   listeners.add(fn);

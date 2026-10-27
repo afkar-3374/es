@@ -453,28 +453,50 @@ function Ground({ mat }: { mat: THREE.MeshStandardMaterial }) {
   );
 }
 
-/** The ground you stand on, and the edge of the map. */
+/**
+ * The ground you stand on, and the edge of the map. The ground is a 400 m square that
+ * follows you: one box the size of the district is too big for the physics to stay exact
+ * (people sank into it). The edge is a wall of 1 km pieces for the same reason.
+ */
 function Bounds() {
   const { world: physics, rapier } = useRapier();
   const [meta, setMeta] = useState(getMeta);
   useEffect(() => onMapChange(() => setMeta(getMeta())), []);
+  const ground = useRef<Collider | null>(null);
   useEffect(() => {
-    const b = meta?.bounds ?? { x0: -3000, x1: 3000, z0: -3000, z1: 3000 };
+    const c = physics.createCollider(rapier.ColliderDesc.cuboid(200, 1, 200).setTranslation(world.player.x, -1, world.player.z));
+    ground.current = c;
+    return () => {
+      ground.current = null;
+      if (physics.getCollider(c.handle)) physics.removeCollider(c, false);
+    };
+  }, [physics, rapier]);
+  useFrame(() => {
+    const c = ground.current;
+    if (!c) return;
+    const at = c.translation();
+    const p = world.vehicle?.ridden ? world.vehicle : world.player;
+    if (Math.hypot(p.x - at.x, p.z - at.z) > 60) c.setTranslation({ x: Math.round(p.x), y: -1, z: Math.round(p.z) });
+  });
+  useEffect(() => {
+    if (!meta) return;
+    const b = meta.bounds;
     const x0 = b.x0 - 2000;
     const x1 = b.x1 + 2000;
     const z0 = b.z0 - 2000;
     const z1 = b.z1 + 2000;
-    const cx = (x0 + x1) / 2;
-    const cz = (z0 + z1) / 2;
-    const hx = (x1 - x0) / 2;
-    const hz = (z1 - z0) / 2;
-    const made = [
-      rapier.ColliderDesc.cuboid(hx, 0.5, hz).setTranslation(cx, -0.5, cz),
-      rapier.ColliderDesc.cuboid(0.5, 10, hz).setTranslation(x0, 10, cz),
-      rapier.ColliderDesc.cuboid(0.5, 10, hz).setTranslation(x1, 10, cz),
-      rapier.ColliderDesc.cuboid(hx, 10, 0.5).setTranslation(cx, 10, z0),
-      rapier.ColliderDesc.cuboid(hx, 10, 0.5).setTranslation(cx, 10, z1),
-    ].map((d) => physics.createCollider(d));
+    const made: Collider[] = [];
+    const wall = (cx: number, cz: number, hx: number, hz: number) => made.push(physics.createCollider(rapier.ColliderDesc.cuboid(hx, 10, hz).setTranslation(cx, 10, cz)));
+    for (let x = x0; x < x1; x += 1000) {
+      const w = Math.min(1000, x1 - x) / 2;
+      wall(x + w, z0, w, 0.5);
+      wall(x + w, z1, w, 0.5);
+    }
+    for (let z = z0; z < z1; z += 1000) {
+      const h = Math.min(1000, z1 - z) / 2;
+      wall(x0, z + h, 0.5, h);
+      wall(x1, z + h, 0.5, h);
+    }
     return () => {
       for (const c of made) if (physics.getCollider(c.handle)) physics.removeCollider(c, false);
     };
