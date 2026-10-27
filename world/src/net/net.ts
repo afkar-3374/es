@@ -11,7 +11,7 @@ import type { VehicleKind } from '../world/vehicleModels';
  */
 
 export const LOOKS = ['rider', 'barista', 'receptionist'] as const;
-export const KINDS: VehicleKind[] = ['scooter', 'auto', 'car', 'cycle'];
+export const KINDS: VehicleKind[] = ['bike', 'car', 'auto', 'cycle'];
 
 /** 0 walking, 1 sitting, 2 riding */
 export type Mode = 0 | 1 | 2;
@@ -66,6 +66,14 @@ export const MAX_CHAT = 160;
 
 export const me = { id: Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4), name: '', look: 0 };
 export const peers = new Map<string, Peer>();
+
+/** Other parts (voice) hear about people coming and going, and about messages meant for them. */
+export const hooks = {
+  arrived: (_id: string) => {},
+  left: (_id: string) => {},
+  /** a message addressed to us over the town channel (voice call setup) */
+  direct: (_from: string, _data: Record<string, unknown>) => {},
+};
 
 type Status = 'off' | 'connecting' | 'online' | 'offline';
 let status = 'off' as Status;
@@ -193,6 +201,7 @@ function onState(d: Record<string, unknown>) {
     peers.set(id, { id, name, look, x, y, z, yaw, mode, speed: 0, vehicle, heard: now, bubble: null });
     addChat({ from: '', name: '', text: `${name} arrived in town 👋`, mine: false });
     emit();
+    hooks.arrived(id);
   }
 }
 
@@ -215,6 +224,7 @@ function drop(id: string, quietly = false) {
   const p = peers.get(id);
   if (!p) return;
   peers.delete(id);
+  hooks.left(id);
   if (!quietly) addChat({ from: '', name: '', text: `${p.name} left`, mine: false });
   emit();
 }
@@ -235,6 +245,10 @@ export const net = {
     channel
       .on('broadcast', { event: 's' }, ({ payload }) => onState(payload ?? {}))
       .on('broadcast', { event: 'c' }, ({ payload }) => onChat(payload ?? {}))
+      .on('broadcast', { event: 'd' }, ({ payload }) => {
+        const from = cleanId(payload?.f);
+        if (from && from !== me.id && payload?.t === me.id && payload.d && typeof payload.d === 'object') hooks.direct(from, payload.d);
+      })
       .on('broadcast', { event: 'hi' }, () => {
         // someone new: tell them about us soon (spread out so we don't all answer at once)
         setTimeout(() => (last.at = 0), Math.random() * 600);
@@ -278,6 +292,13 @@ export const net = {
     channel?.send({ type: 'broadcast', event: 'c', payload: { i: me.id, n: me.name, t } });
     world.bubble = { text: t, at: now };
     addChat({ from: me.id, name: me.name, text: t, mine: true });
+    return true;
+  },
+
+  /** Send something to one person (everyone receives it; only they act on it). */
+  direct(to: string, data: Record<string, unknown>) {
+    if (status !== 'online') return false;
+    channel?.send({ type: 'broadcast', event: 'd', payload: { f: me.id, t: to, d: data } });
     return true;
   },
 

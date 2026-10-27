@@ -217,33 +217,129 @@ export function bakedPerson(source: THREE.Group, key: string, pose: (bones: Bone
   return template.clone();
 }
 
-/** Frames in a baked walk cycle */
-export const WALK_FRAMES = 8;
+/** Frames in a baked walk (and run) cycle */
+export const WALK_FRAMES = 24;
+export const RUN_FRAMES = 16;
 
-/** The walking pose at a point in the stride (phase 0…2π): legs and arms swing in turn. */
-export function walkPose(phase: number, amount = 1): Pose {
-  const swing = Math.sin(phase) * amount;
+/** A smooth bump around `at` (radians round the stride), `width` wide. */
+function bump(phase: number, at: number, width: number) {
+  const d = Math.atan2(Math.sin(phase - at), Math.cos(phase - at));
+  return Math.exp(-(d * d) / (2 * width * width));
+}
+
+/** Relaxed hands: fingers gently curled, thumb tucked, as people's hands hang. */
+function hands(curl: number): Pose {
+  const out: Pose = [];
+  for (const side of ['L', 'R']) {
+    for (const f of ['1', '2', '3', '4']) {
+      const spread = Number(f) * 0.12;
+      out.push([`Bip01_${side}_Finger${f}`, 'z', curl * (0.35 + spread * 0.5)]);
+      out.push([`Bip01_${side}_Finger${f}1`, 'z', curl * (0.55 + spread)]);
+      out.push([`Bip01_${side}_Finger${f}2`, 'z', curl * 0.45]);
+    }
+    out.push([`Bip01_${side}_Finger01`, 'z', curl * 0.25]);
+  }
+  return out;
+}
+
+/** One leg through the stride. `phase` is where this leg is: π/2 = heel strike, −π/2 = toe off. */
+function leg(side: 'L' | 'R', phase: number, run: boolean): Pose {
+  // hip: forward at heel strike, behind at push-off (a walk ≈ +28°/−12°, a run more)
+  const hip = run ? 0.18 + 0.62 * Math.sin(phase) : 0.1 + 0.38 * Math.sin(phase);
+  // knee: a small give as the foot takes the weight, a big bend as the leg swings through
+  const knee = run
+    ? 0.35 * bump(phase, Math.PI / 2 + 0.5, 0.45) + 1.65 * bump(phase, -0.35, 0.75)
+    : 0.22 * bump(phase, Math.PI / 2 + 0.45, 0.4) + 1.05 * bump(phase, -0.45, 0.6) + 0.06;
+  // ankle: toes lifted to clear the ground while swinging, pointed as the foot pushes off
+  const ankle = (run ? 0.3 : 0.18) * bump(phase, 0.1, 0.7) - (run ? 0.55 : 0.35) * bump(phase, -Math.PI / 2 - 0.15, 0.35);
   return [
-    ...STANDING,
-    ['Bip01_L_Thigh', 'z', 0.42 * swing],
-    ['Bip01_R_Thigh', 'z', -0.42 * swing],
-    ['Bip01_L_Calf', 'z', -0.5 * Math.max(0, -swing)],
-    ['Bip01_R_Calf', 'z', -0.5 * Math.max(0, swing)],
-    ['Bip01_L_UpperArm', 'z', -0.3 * swing],
-    ['Bip01_R_UpperArm', 'z', 0.3 * swing],
+    [`Bip01_${side}_Thigh`, 'z', hip],
+    [`Bip01_${side}_Calf`, 'z', -knee],
+    [`Bip01_${side}_Foot`, 'z', ankle],
+    // toes bend as the heel lifts
+    [`Bip01_${side}_Toe0`, 'z', 0.4 * bump(phase, -Math.PI / 2 - 0.25, 0.3)],
   ];
 }
 
+/** One arm, swinging against its leg; elbows bend more as the arm comes forward. */
+function arm(side: 'L' | 'R', phase: number, run: boolean): Pose {
+  // the arm swings opposite its own leg: forward while the leg is back
+  const swing = -Math.sin(phase);
+  const s = side === 'L' ? 1 : -1;
+  return [
+    [`Bip01_${side}_UpperArm`, 'y', s * (run ? 1.0 : 1.18)],
+    [`Bip01_${side}_UpperArm`, 'z', (run ? 0.55 : 0.32) * swing - (run ? 0.1 : 0.03)],
+    [`Bip01_${side}_Forearm`, 'z', run ? -1.35 - 0.2 * swing : -0.2 - 0.3 * Math.max(0, swing)],
+    [`Bip01_${side}_Hand`, 'y', s * -0.12],
+  ];
+}
+
+/** The walking (or running) pose at a point in the stride (phase 0…2π). */
+export function walkPose(phase: number, run = false): Pose {
+  const twist = Math.sin(phase) * (run ? 0.13 : 0.08);
+  return [
+    ...leg('L', phase, run),
+    ...leg('R', phase + Math.PI, run),
+    ...arm('L', phase, run),
+    ...arm('R', phase + Math.PI, run),
+    // the hips turn with the forward leg, the chest turns back the other way, the head stays steady
+    ['Bip01_Pelvis', 'x', twist],
+    ['Bip01_Spine1', 'x', -twist * 1.4],
+    ['Bip01_Head', 'x', twist * 0.4],
+    // lean into a run; walkers stand tall, the head looking where they go
+    ['Bip01_Spine', 'z', run ? 0.16 : 0.03],
+    ['Bip01_Head', 'z', run ? -0.12 : -0.03],
+    ...hands(run ? 1.3 : 0.8),
+  ];
+}
+
+/** How far the body rises and falls through a stride (metres; highest mid-step). */
+export function strideBob(phase: number, run: boolean) {
+  return run ? 0.05 * Math.abs(Math.sin(phase)) - 0.03 : -0.022 * Math.cos(2 * phase) - 0.01;
+}
+
+/** Standing at ease: weight a little on one leg, arms loose, hands relaxed. */
+export const STANDING_EASY: Pose = [
+  ...STANDING,
+  ['Bip01_L_Thigh', 'z', 0.04],
+  ['Bip01_R_Thigh', 'z', -0.02],
+  ['Bip01_L_Calf', 'z', -0.08],
+  ['Bip01_L_Foot', 'z', 0.05],
+  ['Bip01_Pelvis', 'y', 0.03],
+  ['Bip01_Spine1', 'y', -0.03],
+  ...hands(0.8),
+];
+
+/** On a sports bike: crouched over the tank, hands on clip-ons, knees tucked in. */
+export const BIKE_TUCK: Pose = [
+  ...SEATED,
+  ['Bip01_Spine', 'z', 0.55],
+  ['Bip01_Spine1', 'z', 0.15],
+  ['Bip01_Head', 'z', -0.55],
+  ['Bip01_Neck', 'z', -0.25],
+  ['Bip01_L_Thigh', 'z', -0.35],
+  ['Bip01_R_Thigh', 'z', -0.35],
+  ['Bip01_L_Calf', 'z', -0.45],
+  ['Bip01_R_Calf', 'z', -0.45],
+  ['Bip01_L_UpperArm', 'z', 1.05],
+  ['Bip01_R_UpperArm', 'z', 1.05],
+  ['Bip01_L_Forearm', 'z', 0.95],
+  ['Bip01_R_Forearm', 'z', 0.95],
+  ...hands(1.4),
+];
+
 /**
- * A walk cycle baked into a few still frames (plus standing and sitting), so people can
- * walk around without a skeleton. Show a frame by swapping each part's geometry.
+ * A walk and run cycle baked into still frames (plus standing, sitting and riding), so
+ * people move without a skeleton. Show a frame by swapping each part's geometry.
  */
 export function walkCycle(source: THREE.Group) {
   const pose = (p: Pose) => (bones: Bones) => applyPose(source, bones, p);
   const frames = Array.from({ length: WALK_FRAMES }, (_, i) => bakedPerson(source, `walk${i}`, pose(walkPose((i / WALK_FRAMES) * Math.PI * 2))));
-  const stand = bakedPerson(source, 'stand', pose(STANDING));
-  const sit = bakedPerson(source, 'sit', pose(SEATED));
-  return { frames, stand, sit };
+  const run = Array.from({ length: RUN_FRAMES }, (_, i) => bakedPerson(source, `run${i}`, pose(walkPose((i / RUN_FRAMES) * Math.PI * 2, true))));
+  const stand = bakedPerson(source, 'stand', pose(STANDING_EASY));
+  const sit = bakedPerson(source, 'sit', pose([...SEATED, ...hands(0.8)]));
+  const bike = bakedPerson(source, 'bike', pose(BIKE_TUCK));
+  return { frames, run, stand, sit, bike };
 }
 
 /** Make `person` (a copy of one of the cycle's frames) show `frame`. */

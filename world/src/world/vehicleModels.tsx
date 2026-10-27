@@ -8,7 +8,7 @@ import { canvasTexture } from './materials';
  * Vehicles at real size. Every model faces +x (forward), y is up, +z is its right-hand
  * side. Wheels are tagged `userData.wheel = radius` so they can be spun.
  */
-export type VehicleKind = 'car' | 'auto' | 'scooter' | 'cycle';
+export type VehicleKind = 'car' | 'auto' | 'bike' | 'cycle';
 
 export const SPECS: Record<VehicleKind, {
   name: string;
@@ -26,7 +26,7 @@ export const SPECS: Record<VehicleKind, {
 }> = {
   car: { name: 'Car', emoji: '🚗', half: [1.95, 0.75, 0.86], eye: [-0.05, 1.18, 0.36], top: 16, accel: 3.2, turn: 0.75, seat: 0.5 },
   auto: { name: 'Auto rickshaw', emoji: '🛺', half: [1.33, 0.88, 0.66], eye: [0.15, 1.42, 0], top: 12, accel: 2.4, turn: 1.0, seat: 0.82 },
-  scooter: { name: 'Scooter', emoji: '🛵', half: [0.9, 0.6, 0.36], eye: [-0.2, 1.55, 0], top: 14, accel: 3.0, turn: 1.4, seat: 0.78 },
+  bike: { name: 'Superbike', emoji: '🏍️', half: [1.02, 0.58, 0.36], eye: [-0.12, 1.38, 0], top: 62, accel: 8.5, turn: 1.35, seat: 0.84 },
   cycle: { name: 'Bicycle', emoji: '🚲', half: [0.88, 0.55, 0.3], eye: [-0.25, 1.6, 0], top: 6, accel: 1.4, turn: 1.6, seat: 0.95 },
 };
 
@@ -251,43 +251,80 @@ export const Auto = forwardRef<THREE.Group, { plateText?: string }>(function Aut
   );
 });
 
-/* ── Scooter ──────────────────────────────────────────────────── */
+/* ── Superbike: a full-fairing sports bike ─────────────────────── */
 
-export const Scooter = forwardRef<THREE.Group, { color: string; plateText?: string }>(function Scooter({ color, plateText = 'KL 14 C 7788' }, ref) {
-  const paint = useMemo(() => new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.4 }), [color]);
+export const Superbike = forwardRef<THREE.Group, { color: string; plateText?: string }>(function Superbike({ color, plateText = 'KL 14 S 1000' }, ref) {
+  const paint = useMemo(() => new THREE.MeshStandardMaterial({ color, roughness: 0.18, metalness: 0.6, envMapIntensity: 1.4 }), [color]);
   const plateMat = useMemo(() => new THREE.MeshStandardMaterial({ map: plate(plateText), roughness: 0.4 }), [plateText]);
+  const metal = mats.rim;
+  const tube = (a: [number, number, number], b: [number, number, number], r: number, m: THREE.Material, key: string) => {
+    const va = new THREE.Vector3(...a);
+    const vb = new THREE.Vector3(...b);
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), vb.clone().sub(va).normalize());
+    return (
+      <mesh key={key} position={va.clone().add(vb).multiplyScalar(0.5)} quaternion={q} material={m} castShadow>
+        <cylinderGeometry args={[r, r, va.distanceTo(vb), 10]} />
+      </mesh>
+    );
+  };
   return (
     <group ref={ref}>
-      {/* front apron and leg shield */}
-      <RoundedBox args={[0.22, 0.85, 0.42]} radius={0.08} smoothness={3} position={[0.5, 0.72, 0]} rotation-z={-0.22} castShadow material={paint} />
-      {/* floorboard */}
-      <mesh position={[0.05, 0.36, 0]} castShadow material={mats.black}>
-        <boxGeometry args={[0.6, 0.06, 0.36]} />
-      </mesh>
-      {/* rear body under the seat */}
-      <RoundedBox args={[0.8, 0.42, 0.38]} radius={0.12} smoothness={3} position={[-0.42, 0.55, 0]} castShadow material={paint} />
-      <RoundedBox args={[0.7, 0.1, 0.32]} radius={0.04} smoothness={2} position={[-0.38, 0.8, 0]} castShadow material={mats.seat} />
-      {/* handlebar with headlight */}
-      <mesh position={[0.62, 1.12, 0]} rotation-x={Math.PI / 2} material={mats.black}>
-        <cylinderGeometry args={[0.018, 0.018, 0.68, 8]} />
-      </mesh>
-      <RoundedBox args={[0.14, 0.14, 0.3]} radius={0.05} smoothness={2} position={[0.66, 1.12, 0]} material={paint} />
-      <mesh position={[0.74, 1.1, 0]} rotation-z={Math.PI / 2} material={mats.head}>
-        <cylinderGeometry args={[0.05, 0.05, 0.03, 16]} />
-      </mesh>
+      {/* front fairing: nose with twin headlights and a smoked screen */}
+      <RoundedBox args={[0.5, 0.36, 0.42]} radius={0.12} smoothness={4} position={[0.62, 0.86, 0]} rotation-z={-0.38} castShadow material={paint} />
+      <RoundedBox args={[0.34, 0.2, 0.3]} radius={0.08} smoothness={3} position={[0.86, 0.74, 0]} rotation-z={-0.5} castShadow material={paint} />
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[0.62, 1.12, s * 0.36]} rotation-x={Math.PI / 2} material={mats.black}>
-          <cylinderGeometry args={[0.022, 0.022, 0.1, 8]} />
+        <mesh key={s} position={[0.97, 0.76, s * 0.075]} rotation-z={-0.5} material={mats.head}>
+          <boxGeometry args={[0.03, 0.06, 0.1]} />
         </mesh>
       ))}
-      <mesh position={[-0.83, 0.62, 0]} material={mats.tail}>
-        <boxGeometry args={[0.03, 0.06, 0.16]} />
+      <mesh position={[0.66, 1.08, 0]} rotation-z={-0.75} material={mats.glass}>
+        <boxGeometry args={[0.3, 0.012, 0.3]} />
       </mesh>
-      <mesh position={[-0.86, 0.48, 0]} rotation-y={-Math.PI / 2} material={plateMat}>
-        <planeGeometry args={[0.22, 0.08]} />
+      {/* side fairings down to the belly pan */}
+      <RoundedBox args={[0.78, 0.42, 0.4]} radius={0.12} smoothness={4} position={[0.2, 0.58, 0]} castShadow material={paint} />
+      <RoundedBox args={[0.7, 0.12, 0.3]} radius={0.05} smoothness={2} position={[0.12, 0.33, 0]} castShadow material={mats.black} />
+      {/* tank, seat and the high tail */}
+      <RoundedBox args={[0.5, 0.24, 0.36]} radius={0.1} smoothness={4} position={[0.12, 0.9, 0]} castShadow material={paint} />
+      <RoundedBox args={[0.42, 0.08, 0.28]} radius={0.035} smoothness={2} position={[-0.3, 0.86, 0]} rotation-z={0.1} castShadow material={mats.seat} />
+      <RoundedBox args={[0.5, 0.16, 0.22]} radius={0.06} smoothness={3} position={[-0.62, 0.92, 0]} rotation-z={0.22} castShadow material={paint} />
+      <mesh position={[-0.88, 0.99, 0]} rotation-z={0.22} material={mats.tail}>
+        <boxGeometry args={[0.03, 0.04, 0.16]} />
       </mesh>
-      <Wheel r={0.24} w={0.09} position={[0.62, 0.24, 0]} />
-      <Wheel r={0.24} w={0.09} position={[-0.6, 0.24, 0]} />
+      {/* plate on a hugger below the tail */}
+      <mesh position={[-0.86, 0.72, 0]} rotation-y={-Math.PI / 2} rotation-x={-0.3} material={plateMat}>
+        <planeGeometry args={[0.2, 0.08]} />
+      </mesh>
+      {/* engine block and the under-seat exhaust */}
+      <RoundedBox args={[0.42, 0.32, 0.3]} radius={0.05} smoothness={2} position={[0.08, 0.44, 0]} material={mats.black} />
+      {tube([0.0, 0.32, 0.12], [-0.55, 0.5, 0.17], 0.045, mats.chrome, 'pipe')}
+      <mesh position={[-0.62, 0.53, 0.17]} rotation-z={Math.PI / 2 - 0.3} material={mats.black}>
+        <cylinderGeometry args={[0.06, 0.055, 0.2, 14]} />
+      </mesh>
+      {/* upside-down forks, clip-on bars and mirrors */}
+      {[-1, 1].map((s) => (
+        <group key={s}>
+          {tube([0.82, 0.33, s * 0.1], [0.58, 1.0, s * 0.1], 0.028, metal, `fork${s}`)}
+          {tube([0.6, 1.0, s * 0.1], [0.55, 1.0, s * 0.3], 0.016, mats.black, `bar${s}`)}
+          {tube([0.62, 1.05, s * 0.2], [0.66, 1.16, s * 0.27], 0.008, mats.black, `stalk${s}`)}
+          <mesh position={[0.66, 1.17, s * 0.28]} material={paint}>
+            <boxGeometry args={[0.04, 0.06, 0.12]} />
+          </mesh>
+          {/* swingarm */}
+          {tube([0.02, 0.4, s * 0.12], [-0.68, 0.32, s * 0.1], 0.03, metal, `arm${s}`)}
+        </group>
+      ))}
+      <mesh position={[-0.3, 0.6, 0]} rotation-z={0.9} material={mats.chrome}>
+        <cylinderGeometry args={[0.03, 0.03, 0.4, 8]} />
+      </mesh>
+      {/* fat sports tyres with disc brakes */}
+      <Wheel r={0.31} w={0.12} rim={0.72} position={[0.82, 0.31, 0]} />
+      <Wheel r={0.32} w={0.19} rim={0.72} position={[-0.68, 0.32, 0]} />
+      {[0.82, -0.68].map((x) => (
+        <mesh key={x} position={[x, x > 0 ? 0.31 : 0.32, 0.075]} rotation-x={Math.PI / 2} material={mats.chrome} userData={{ wheel: x > 0 ? 0.31 : 0.32 }}>
+          <cylinderGeometry args={[0.16, 0.16, 0.008, 22]} />
+        </mesh>
+      ))}
+      <RoundedBox args={[0.4, 0.06, 0.16]} radius={0.03} smoothness={2} position={[0.82, 0.66, 0]} castShadow material={paint} />
     </group>
   );
 });
@@ -350,7 +387,7 @@ export function VehicleModel({ kind, color }: { kind: VehicleKind; color: string
   useLayoutEffect(() => (ref.current ? mergeStatic(ref.current) : undefined), [kind, color]);
   return (
     <group ref={ref}>
-      {kind === 'car' ? <Car color={color} /> : kind === 'auto' ? <Auto /> : kind === 'scooter' ? <Scooter color={color} /> : <Cycle color={color} />}
+      {kind === 'car' ? <Car color={color} /> : kind === 'auto' ? <Auto /> : kind === 'bike' ? <Superbike color={color} /> : <Cycle color={color} />}
     </group>
   );
 }

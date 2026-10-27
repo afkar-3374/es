@@ -5,4 +5,6 @@
  */
 export const REALTIME_URL = 'wss://ymumrxpdcikvynhljsyu.supabase.co/realtime/v1';
 export const REALTIME_KEY = 'sb_publishable_PfGr2cdE5450n3domALrSA_A2as6Wdy';
-export const CHANNEL = 'es-world:town';
+// ?room=name (previews and tests) uses a separate channel so test visitors don't appear in town
+const room = new URLSearchParams(location.search).get('room')?.replace(/[^a-z0-9-]/gi, '').slice(0, 24);
+export const CHANNEL = room ? `es-world:test-${room}` : 'es-world:town';

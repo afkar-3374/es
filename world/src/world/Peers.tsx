@@ -3,10 +3,11 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import { CuboidCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
-import { showFrame, usePersonSource, walkCycle, WALK_FRAMES } from './people';
+import { RUN_FRAMES, showFrame, strideBob, usePersonSource, walkCycle, WALK_FRAMES } from './people';
 import { SPECS, VehicleModel, type VehicleKind } from './vehicleModels';
 import { LOOKS, peers, useNet, type Peer } from '../net/net';
 import { world } from './state';
+import { voice } from '../net/voice';
 
 /*
  * Everyone else in town: their person (walking, sitting or riding), a name tag with
@@ -88,7 +89,7 @@ export function Peers() {
 
 /** Where a rider sits on each vehicle (as in the traffic). */
 function seatOffset(kind: VehicleKind): [number, number] {
-  const x = kind === 'auto' ? 0.25 : kind === 'cycle' ? -0.28 : kind === 'car' ? -0.05 : -0.32;
+  const x = kind === 'auto' ? 0.25 : kind === 'cycle' ? -0.28 : kind === 'car' ? -0.05 : -0.22;
   return [x, SPECS[kind].seat - 0.92];
 }
 
@@ -107,6 +108,7 @@ function PeerPerson({ id, look, name }: { id: string; look: number; name: string
   const bubble = useRef<HTMLDivElement>(null);
   const phase = useRef(0);
   const said = useRef('');
+  const nameTag = useRef<HTMLDivElement>(null);
 
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 0.05);
@@ -134,12 +136,17 @@ function PeerPerson({ id, look, name }: { id: string; look: number; name: string
     g.visible = dist < SHOW_PERSON;
 
     // sitting (in a chair or on a vehicle), walking, or standing still
-    if (riding || p.mode === 1) showFrame(model, cycle.sit);
+    if (riding) showFrame(model, p.vehicle!.kind === 'bike' ? cycle.bike : cycle.sit);
+    else if (p.mode === 1) showFrame(model, cycle.sit);
     else if (g.visible) {
-      const speed = Math.min(p.speed, 5);
+      const speed = Math.min(p.speed, 7);
       if (speed > 0.2) {
-        phase.current += dt * (2.2 + speed * 1.6);
-        showFrame(model, cycle.frames[Math.floor(((phase.current / (Math.PI * 2)) % 1) * WALK_FRAMES)]);
+        // the legs keep pace with the ground: a walking stride is about 1.4 m, a running one 2.4 m
+        const run = speed > 2.6;
+        phase.current += (dt * Math.PI * 2 * speed) / (run ? 2.4 : 1.4);
+        const t = (phase.current / (Math.PI * 2)) % 1;
+        showFrame(model, run ? cycle.run[Math.floor(t * RUN_FRAMES)] : cycle.frames[Math.floor(t * WALK_FRAMES)]);
+        g.position.y += strideBob(phase.current, run);
       } else showFrame(model, cycle.stand);
     }
 
@@ -154,7 +161,11 @@ function PeerPerson({ id, look, name }: { id: string; look: number; name: string
       bubble.current.textContent = b;
       bubble.current.style.display = b ? '' : 'none';
     }
-    if (tag.current) tag.current.style.opacity = dist < SHOW_LABEL ? '1' : '0';
+    // everyone in the call can be heard anywhere, so their name shows while they speak
+    const speaking = voice.level(id) > 0.04;
+    if (tag.current) tag.current.style.opacity = dist < SHOW_LABEL || speaking ? '1' : '0';
+    if (label.current) label.current.visible = dist < SHOW_LABEL || speaking;
+    if (nameTag.current) nameTag.current.classList.toggle('speaking', speaking);
   });
 
   return (
@@ -166,7 +177,9 @@ function PeerPerson({ id, look, name }: { id: string; look: number; name: string
         <Html center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
           <div className="peer-label" ref={tag}>
             <div className="peer-bubble" ref={bubble} style={{ display: 'none' }} />
-            <div className="peer-name">{name}</div>
+            <div className="peer-name" ref={nameTag}>
+              {name}
+            </div>
           </div>
         </Html>
       </group>

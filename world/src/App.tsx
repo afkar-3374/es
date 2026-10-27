@@ -6,20 +6,18 @@ import { QualityControl } from './world/QualityControl';
 import { useQuality } from './world/quality';
 import { LampPool } from './world/Lamps';
 import { Merged } from './world/Merged';
-import { Pedestrians } from './world/Pedestrians';
 import { Physics } from '@react-three/rapier';
 import { useConditions } from './env/useConditions';
 import { Atmosphere } from './world/Atmosphere';
 import { Rain } from './world/Rain';
 import { Street } from './world/Street';
-import { Roads } from './world/Roads';
-import { Town, TOWN } from './world/Town';
-import { Beach, BEACH_PALMS } from './world/Beach';
+import { MapTiles } from './world/MapTiles';
 import { Peers } from './world/Peers';
 import { Chat } from './ui/Chat';
 import { Minimap } from './ui/Minimap';
 import { goLandscape, RotateHint } from './ui/Landscape';
 import { net, peers, type Profile } from './net/net';
+import { voice } from './net/voice';
 import { Neighbours } from './world/Neighbours';
 import { Building } from './world/Building';
 import { Interior } from './world/Interior';
@@ -34,6 +32,7 @@ import { Interactor } from './world/Interactor';
 import { requestUse } from './world/interact';
 import { Palms, type PalmSpot } from './world/Palms';
 import { Player } from './player/Player';
+import { PosePreview } from './world/PosePreview';
 import { Hud } from './ui/Hud';
 import { Intro } from './ui/Intro';
 import { TouchControls } from './ui/TouchControls';
@@ -68,12 +67,10 @@ const DEBUG = new URLSearchParams(location.search).has('debug');
 // For previews: ?debug exposes a way to press "use" from the console
 if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esUse: requestUse, esWorld: world, esSay: net.say, esRide: ride, esInput: input, esPeers: peers });
 
-// Coconut palms along both footpaths (not in front of the entrance), in the groves and on the beach
+// Coconut palms along both footpaths (not in front of the entrance)
 const PALMS: PalmSpot[] = [
-  ...[-58, -44, -27, 27, 44, 58, 80, -80, 125, -125, 150, -150, 178, -178].map((x) => ({ x, z: 3.6 })),
-  ...[-70, -50, -31, -12, 7, 26, 47, 68, 88, -88, 130, -130, 172, -172].map((x) => ({ x, z: 16.9 })),
-  ...TOWN.palms,
-  ...BEACH_PALMS,
+  ...[-54, -44, -27, 27, 44, 54].map((x) => ({ x, z: 3.6 })),
+  ...[-50, -31, -12, 7, 26, 47].map((x) => ({ x, z: 16.9 })),
 ];
 
 /** The building's insides are only drawn when you're close enough to see them. */
@@ -102,6 +99,7 @@ export default function App() {
   const enter = useCallback((profile: Profile) => {
     setEntered(true);
     net.start(profile);
+    voice.start();
     goLandscape();
     music.setRain(world.rain);
     if (!isTouch) lockPointer();
@@ -132,9 +130,7 @@ export default function App() {
           <LampPool />
           <Physics gravity={[0, -9.81, 0]}>
             <Street />
-            <Roads />
-            {!OFF.has('town') && <Town />}
-            {!OFF.has('beach') && <Beach />}
+            {!OFF.has('map') && <MapTiles />}
             <Neighbours />
             <Merged>
               <Building />
@@ -148,12 +144,12 @@ export default function App() {
                 {!OFF.has('cafe') && <Cafe />}
               </Merged>
             </NearBuilding>
-            {!OFF.has('vehicles') && <Vehicles c={c} />}
+            {!OFF.has('vehicles') && <Vehicles />}
             {entered && <Peers />}
             <Player start={START} startYaw={START_YAW} startPitch={START_PITCH} />
           </Physics>
           <Palms spots={PALMS} />
-          {!OFF.has('people') && <Pedestrians />}
+          {DEBUG && new URLSearchParams(location.search).has('poses') && <PosePreview />}
           <Interactor />
           {!OFF.has('held') && <Held />}
           <Preload all />

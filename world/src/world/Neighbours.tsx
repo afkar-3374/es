@@ -157,12 +157,11 @@ export function Neighbours() {
     const r = rng(2026);
     const colliders: { x: number; z: number; w: number; d: number; h: number }[] = [];
 
-    // north side: on both sides of the Electrosparkzz building, fronts at z = 0
-    // (leaving room for the avenues that cross at x = ±100, and stopping short of the end roads)
-    const skip: [number, number][] = [[-107.5, -92.5], [92.5, 107.5]];
-    const north = [...makeLots(11, 13.5, 197, 1, skip), ...makeLots(12, -13.5, -197, -1, skip)];
+    // north side: on both sides of the Electrosparkzz building, fronts at z = 0, as far as
+    // the modelled street goes (the real town carries on past it)
+    const north = [...makeLots(11, 13.5, 58, 1), ...makeLots(12, -13.5, -58, -1)];
     // south side: fronts at z = 18, facing the road
-    const south = [...makeLots(21, -197, 197, 1, skip)];
+    const south = [...makeLots(21, -58, 58, 1)];
 
     for (const lot of north) {
       const parts: [Kind, THREE.BufferGeometry][] = [];

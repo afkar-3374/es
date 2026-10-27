@@ -5,7 +5,6 @@ import { useFrame } from '@react-three/fiber';
 import { CuboidCollider, RigidBody } from '@react-three/rapier';
 import { applyWetness, canvasTexture, usePBR } from './materials';
 import { world } from './state';
-import { junctions, roadById } from './layout';
 import { mergeStatic } from './merge';
 
 /*
@@ -14,21 +13,11 @@ import { mergeStatic } from './merge';
  *   z  5 … 15   two-lane road, centre line at z = 10
  *   z 15 … 18   footpath on the south side, buildings beyond
  */
-export const ROAD = { north: 5, south: 15, centre: 10, length: 410 };
+export const ROAD = { north: 5, south: 15, centre: 10, length: 120 };
 export const FOOTPATH_H = 0.16;
 
-/** The footpaths stop where the avenues cross and at the coast and ring roads. */
-export const SEGMENTS: [number, number][] = (() => {
-  const cuts = junctions(roadById('main')).map((j) => [j.at - j.half - 0.5, j.at + j.half + 0.5]).sort((a, b) => a[0] - b[0]);
-  const out: [number, number][] = [];
-  let x = -ROAD.length / 2;
-  for (const [a, b] of cuts) {
-    if (a > x) out.push([x, a]);
-    x = Math.max(x, b);
-  }
-  if (x < ROAD.length / 2) out.push([x, ROAD.length / 2]);
-  return out.filter(([a, b]) => b - a > 1);
-})();
+/** The modelled stretch; the real road (MapTiles) carries on from both ends. */
+export const SEGMENTS: [number, number][] = [[-ROAD.length / 2, ROAD.length / 2]];
 
 export function Street() {
   const asphalt = usePBR('asphalt_02', [ROAD.length / 6, 10 / 6]);
@@ -145,7 +134,7 @@ function Footpaths({ x0, x1, paving, paving2, kerb }: { x0: number; x1: number; 
 
 /** Concrete electric poles along the south footpath, with sagging wires. */
 function Poles() {
-  const xs = useMemo(() => Array.from({ length: 14 }, (_, i) => -195 + i * 30), []);
+  const xs = useMemo(() => Array.from({ length: 5 }, (_, i) => -56 + i * 28), []);
   const concrete = useMemo(() => new THREE.MeshStandardMaterial({ color: '#a7a39a', roughness: 0.9 }), []);
   const wires = useMemo(() => {
     const pts: THREE.Vector3[] = [];
@@ -194,7 +183,7 @@ function Poles() {
 
 /** LED street lights on the north footpath; they switch on at dusk. */
 function StreetLights() {
-  const xs = useMemo(() => [-60, -36, -18, 18, 36, 60], []);
+  const xs = useMemo(() => [-54, -36, -18, 18, 36, 54], []);
   const metal = useMemo(() => new THREE.MeshStandardMaterial({ color: '#5d6166', roughness: 0.45, metalness: 0.7 }), []);
   const lampMat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#d9dde0', emissive: '#ffe7c2', emissiveIntensity: 0, roughness: 0.3 }), []);
   const lights = useRef<(VirtualLight | null)[]>([]);

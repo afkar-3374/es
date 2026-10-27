@@ -12,7 +12,7 @@ function ensure() {
   return ctx;
 }
 
-export type HornKind = 'car' | 'auto' | 'scooter' | 'cycle';
+export type HornKind = 'car' | 'auto' | 'bike' | 'cycle';
 
 /** A horn (or a bicycle bell), `volume` 0…1 (lower for faraway traffic). */
 export function horn(kind: HornKind, volume = 1) {
@@ -96,7 +96,13 @@ export const engine = (() => {
     speed(v: number) {
       if (!osc || !osc2 || !ctx) return;
       const base = kind === 'car' ? 38 : kind === 'auto' ? 30 : 55;
-      const f = base + Math.abs(v) * (kind === 'car' ? 6 : 9);
+      let f = base + Math.abs(v) * (kind === 'car' ? 6 : 9);
+      if (kind === 'bike') {
+        // six gears: the revs climb through each one, then drop as it shifts up
+        const gear = Math.min(Math.floor(Math.abs(v) / 11), 5);
+        const rev = (Math.abs(v) - gear * 11) / 11;
+        f = 62 + gear * 9 + Math.min(rev, 1.4) * 150;
+      }
       osc.frequency.setTargetAtTime(f, ctx.currentTime, 0.1);
       osc2.frequency.setTargetAtTime(f * 0.5, ctx.currentTime, 0.1);
     },

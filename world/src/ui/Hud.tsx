@@ -8,6 +8,7 @@ import { SPECS } from '../world/vehicleModels';
 import { KINDS } from '../net/net';
 import { typing } from '../player/input';
 import { quality, useQuality } from '../world/quality';
+import { useVoice, voice } from '../net/voice';
 
 /** Pick a vehicle; it turns up right in front of you. */
 export function chooseVehicle() {
@@ -28,6 +29,7 @@ export function Hud({ c }: { c: Conditions }) {
   const { roster, status } = useNet();
   const { riding, card, book } = useUi();
   const gfx = useQuality();
+  const v = useVoice();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -54,9 +56,22 @@ export function Hud({ c }: { c: Conditions }) {
         </div>
       </div>
       <div className="hud-right">
+        <button
+          type="button"
+          className={`pill link mic ${v.mic}`}
+          aria-pressed={v.mic === 'on'}
+          title={
+            v.mic === 'blocked'
+              ? 'Your browser blocked the microphone: allow it in the address bar, then tap here'
+              : `Everyone in town hears you while your mic is on${v.talking ? ` · in voice with ${v.talking}` : ''}`
+          }
+          onClick={() => voice.toggleMute()}
+        >
+          {v.mic === 'on' ? '🎙️ Mute' : v.mic === 'muted' ? '🔇 Unmute' : v.mic === 'asking' ? '🎙️ …' : '🎙️ Turn on mic'}
+        </button>
         {!riding && !card && !book && (
           <button type="button" className="pill link" onClick={chooseVehicle} title="Call your own vehicle (V)">
-            🛵 My vehicle
+            🏍️ My vehicle
           </button>
         )}
         <button
