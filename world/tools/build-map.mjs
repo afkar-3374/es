@@ -32,7 +32,8 @@ const CLEAR_ROADS = { x0: -60, x1: 60, z0: -30, z1: 36 };
 const elements = new Map();
 let district = null;
 for (const f of readdirSync(CACHE)) {
-  if (!f.endsWith('.json')) continue;
+  // the OpenStreetMap squares (12.44_74.96.json …) and the district outline
+  if (!f.endsWith('.json') || (!/^\d/.test(f) && f !== 'district.json')) continue;
   const data = JSON.parse(readFileSync(join(CACHE, f), 'utf8'));
   if (f === 'district.json') district = data.elements.find((e) => e.type === 'relation');
   else for (const e of data.elements) elements.set(`${e.type}${e.id}`, e);
@@ -190,6 +191,47 @@ const W = (p) => world(enu(p));
 // which way north is in the world (for the map and the sun)
 const NORTH = [-AX[1], -AZ[1]];
 console.log(`front road: ${front.name || "(unnamed)"} way ${front.way}, ${Math.round(Math.hypot(...front.p))} m from the site; north = ${NORTH.map((n) => n.toFixed(3))}`);
+
+/* ── Ground heights (tools/fetch-terrain.py) ─────────────────── */
+
+// Heights are kept relative to the building's site, so the modelled street stays at y = 0;
+// around it the ground is levelled, blending into the real lie of the land.
+let terrain = null;
+try {
+  const info = JSON.parse(readFileSync(join(CACHE, 'terrain.json'), 'utf8'));
+  const bin = readFileSync(join(CACHE, 'terrain.bin'));
+  terrain = { ...info, data: new Int16Array(bin.buffer, bin.byteOffset, bin.length / 2) };
+} catch {
+  console.log('no terrain: the ground is flat');
+}
+function rawHeight(lat, lon) {
+  if (!terrain) return 0;
+  const n = 2 ** terrain.zoom * 256;
+  const s = Math.sin((lat * Math.PI) / 180);
+  const x = ((lon + 180) / 360) * n - terrain.tx0 * 256 - 0.5;
+  const y = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n - terrain.ty0 * 256 - 0.5;
+  const i = Math.max(0, Math.min(terrain.width - 2, Math.floor(x)));
+  const j = Math.max(0, Math.min(terrain.height - 2, Math.floor(y)));
+  const fx = Math.max(0, Math.min(1, x - i));
+  const fy = Math.max(0, Math.min(1, y - j));
+  const at = (a, b) => terrain.data[b * terrain.width + a];
+  return (at(i, j) * (1 - fx) + at(i + 1, j) * fx) * (1 - fy) + (at(i, j + 1) * (1 - fx) + at(i + 1, j + 1) * fx) * fy;
+}
+const SITE_HEIGHT = rawHeight(SITE.lat, SITE.lon);
+/** Ground height at a world point, metres above the building's street. */
+function heightAt(x, z) {
+  const [ex, ez] = unworld([x, z]);
+  const h = rawHeight(SITE.lat - ez / KZ, SITE.lon + ex / KX) - SITE_HEIGHT;
+  // level round the site, then ease into the real ground over 120 m
+  const dx = Math.max(0, Math.abs(x) - 90);
+  const dz = Math.max(0, z < 0 ? -60 - z : z - 70);
+  const d = Math.hypot(dx, dz);
+  const t = Math.min(1, d / 120);
+  return h * t * t * (3 - 2 * t);
+}
+/** Grid spacing of each tile's heights (metres); tiles share their edge rows. */
+const HSTEP = 40;
+const HN = TILE / HSTEP + 1;
 
 /* ── Tiles ────────────────────────────────────────────────────── */
 
@@ -438,7 +480,87 @@ for (const e of elements.values()) {
   if (e.type === 'way' && e.geometry) addBuilding(e, e.geometry);
   if (e.type === 'relation') for (const r of rings(e.members.filter((m) => m.type === 'way' && m.role === 'outer' && m.geometry).map((m) => m.geometry))) addBuilding(e, r);
 }
-console.log(`${nBuildings} buildings`);
+const fromOsm = nBuildings;
+
+// Most of Kasaragod's buildings aren't drawn in OpenStreetMap: Google's Open Buildings
+// (CC BY-4.0 / ODbL) has nearly all of them, traced from satellite imagery. Where
+// OpenStreetMap already has a building it wins. No heights here: floors are guessed from size.
+// (<cache>/footprints/*.csv.gz, made by tools/extract-buildings.mjs)
+const osmGrid = new Map();
+const cellOf = (x, z) => `${Math.floor(x / 20)}_${Math.floor(z / 20)}`;
+for (const t of tiles.values())
+  for (const b of t.h) {
+    const ring = [];
+    for (let k = 2; k + 1 < b.length; k += 2) ring.push([b[k] / 10 + t.i * TILE, b[k + 1] / 10 + t.j * TILE]);
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const [x, z] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+    for (let i = Math.floor(x0 / 20); i <= Math.floor(x1 / 20); i++)
+      for (let j = Math.floor(z0 / 20); j <= Math.floor(z1 / 20); j++) {
+        const k = `${i}_${j}`;
+        if (!osmGrid.has(k)) osmGrid.set(k, []);
+        osmGrid.get(k).push(ring);
+      }
+  }
+const inRing = (ring, x, z) => {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [ax, az] = ring[i];
+    const [bx, bz] = ring[j];
+    if (az > z !== bz > z && x < ((bx - ax) * (z - az)) / (bz - az) + ax) inside = !inside;
+  }
+  return inside;
+};
+const coveredByOsm = (ringW) => {
+  const cx = ringW.reduce((a, p) => a + p[0], 0) / ringW.length;
+  const cz = ringW.reduce((a, p) => a + p[1], 0) / ringW.length;
+  for (const r of osmGrid.get(cellOf(cx, cz)) ?? []) {
+    if (inRing(r, cx, cz)) return true;
+    // an OpenStreetMap building inside this one counts too
+    const ox = r.reduce((a, p) => a + p[0], 0) / r.length;
+    const oz = r.reduce((a, p) => a + p[1], 0) / r.length;
+    if (inRing(ringW, ox, oz)) return true;
+  }
+  return false;
+};
+let fpId = 1e12;
+let fpSkipped = 0;
+const fpDir = join(CACHE, 'footprints');
+let fpFiles = [];
+try {
+  fpFiles = readdirSync(fpDir).filter((f) => f.endsWith('.csv.gz'));
+} catch {
+  /* none extracted */
+}
+const { gunzipSync } = await import('node:zlib');
+for (const f of fpFiles) {
+  const lines = gunzipSync(readFileSync(join(fpDir, f))).toString('utf8').split('\n');
+  for (let n = 1; n < lines.length; n++) {
+    // latitude,longitude,area_in_meters,confidence,"POLYGON((lon lat, …))",plus_code
+    const line = lines[n];
+    const open = line.indexOf('((');
+    const close = line.indexOf('))', open);
+    if (open < 0 || close < 0) continue;
+    const ringLL = line
+      .slice(open + 2, close)
+      .split(',')
+      .map((pair) => {
+        const [lon, lat] = pair.trim().split(' ').map(Number);
+        return { lat, lon };
+      });
+    if (ringLL.length < 4 || !inDistrict(ringLL[0].lat, ringLL[0].lon)) continue;
+    const ringW = ringLL.map(W);
+    if (coveredByOsm(ringW)) {
+      fpSkipped++;
+      continue;
+    }
+    // floors from the footprint: small homes one or two, bigger buildings more
+    const A = Math.abs(area(ringW));
+    const r = hash(fpId);
+    const levels = A < 70 ? 1 : A < 180 ? (r < 0.6 ? 1 : 2) : A < 500 ? (r < 0.5 ? 2 : 3) : 2 + Math.floor(r * 3);
+    addBuilding({ id: fpId++, type: 'way', tags: { building: 'yes', 'building:levels': String(levels) } }, ringLL);
+  }
+}
+console.log(`${nBuildings} buildings (${fromOsm} from OpenStreetMap, ${nBuildings - fromOsm} more from Google Open Buildings, ${fpSkipped} already mapped)`);
 
 /* ── Water ────────────────────────────────────────────────────── */
 
@@ -811,6 +933,12 @@ for (const [k, t] of tiles) {
   const { bits, count } = waterMask(t);
   waterTiles.set(k, { bits, count });
   const data = { b: t.b, h: t.h, o: t.o, s: t.s };
+  if (terrain) {
+    // ground heights, decimetres, row by row (z) from the tile's corner
+    const g = new Int16Array(HN * HN);
+    for (let r = 0; r < HN; r++) for (let q = 0; q < HN; q++) g[r * HN + q] = Math.max(-32768, Math.min(32767, Math.round(heightAt(t.i * TILE + q * HSTEP, t.j * TILE + r * HSTEP) * 10)));
+    data.g = Buffer.from(g.buffer).toString('base64');
+  }
   if (count === CELLS * CELLS) data.w = 1;
   else if (count > 0) data.w = Buffer.from(bits).toString('base64');
   const json = JSON.stringify(data);
@@ -846,7 +974,15 @@ for (let y = 0; y < IH; y++)
       const k = cz * CELLS + cx;
       water = !!(t.bits[k >> 3] & (1 << (k & 7)));
     } else if (!t) water = isSea(wx, wz);
-    px(x, y, water ? [134, 201, 214] : t ? [214, 226, 190] : [196, 204, 180]);
+    // hills shaded as if lit from the north-west
+    let shade = 1;
+    if (terrain && !water) {
+      const dx = heightAt(wx + MPP, wz) - heightAt(wx - MPP, wz);
+      const dz = heightAt(wx, wz + MPP) - heightAt(wx, wz - MPP);
+      shade = Math.max(0.55, Math.min(1.25, 1 + (-dx * 0.7 - dz * 0.7) / (2 * MPP) * 2.2));
+    }
+    const base = water ? [134, 201, 214] : t ? [214, 226, 190] : [196, 204, 180];
+    px(x, y, base.map((v) => Math.max(0, Math.min(255, Math.round(v * shade)))));
   }
 const line = (ax, az, bx, bz, w, col) => {
   const steps = Math.ceil(Math.hypot(bx - ax, bz - az) / (MPP / 2)) + 1;
@@ -912,6 +1048,17 @@ for (const g of gaps.sort((a, b) => a.side.localeCompare(b.side) || a.x - b.x)) 
 }
 console.log(`${mergedGaps.length} ways into the street`, mergedGaps);
 
+// the whole district's ground, coarse, for the far view (over the same area as the overview image)
+const FAR = 200;
+let far = null;
+if (terrain) {
+  const nx = Math.ceil((IW * MPP) / FAR) + 1;
+  const nz = Math.ceil((IH * MPP) / FAR) + 1;
+  const g = new Int16Array(nx * nz);
+  for (let r = 0; r < nz; r++) for (let q = 0; q < nx; q++) g[r * nx + q] = Math.max(-32768, Math.min(32767, Math.round(heightAt(X0 + q * FAR, Z0 + r * FAR))));
+  far = { x0: X0, z0: Z0, step: FAR, nx, nz, g: Buffer.from(g.buffer).toString('base64') };
+}
+
 writeFileSync(
   join(OUT, 'meta.json'),
   JSON.stringify({
@@ -920,9 +1067,13 @@ writeFileSync(
     north: NORTH.map((n) => Math.round(n * 1e6) / 1e6),
     tile: TILE,
     cell: CELL,
+    /** ground heights: every `hstep` metres, `hn` a side per tile (absent: flat) */
+    hstep: terrain ? HSTEP : 0,
+    hn: terrain ? HN : 0,
     bounds: { x0: Math.floor(minX), x1: Math.ceil(maxX), z0: Math.floor(minZ), z1: Math.ceil(maxZ) },
     overview: { x0: X0, z0: Z0, mpp: MPP, w: IW, h: IH },
     tiles: list,
+    far,
     places,
     gaps: mergedGaps,
     destinations,

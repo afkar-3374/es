@@ -24,9 +24,14 @@ export interface Meta {
   north: [number, number];
   tile: number;
   cell: number;
+  /** ground heights every `hstep` metres, `hn` a side per tile (0: flat ground) */
+  hstep?: number;
+  hn?: number;
   bounds: { x0: number; x1: number; z0: number; z1: number };
   overview: { x0: number; z0: number; mpp: number; w: number; h: number };
   tiles: string[];
+  /** the whole district's ground, coarse (metres; over the overview image's area) */
+  far?: { x0: number; z0: number; step: number; nx: number; nz: number; g: string } | null;
   places: Place[];
   /** where real roads join the modelled street: shops and footpaths leave these open */
   gaps?: Gap[];
@@ -51,6 +56,8 @@ export interface TileData {
   s: number[][];
   /** water: 1 = all of it, else a base64 bitmask of 5 m cells (row by row) */
   w?: 1 | string;
+  /** ground heights: base64 int16 decimetres, row by row from the tile's corner */
+  g?: string;
 }
 
 export interface Tile {
@@ -60,6 +67,8 @@ export interface Tile {
   data: TileData;
   /** one bit per water cell (null: no water) */
   water: Uint8Array | null;
+  /** ground heights, metres (null: flat) */
+  ground: Float32Array | null;
 }
 
 export const RAIL = 8;
@@ -121,7 +130,13 @@ export function loadTile(key: string) {
           let water: Uint8Array | null = null;
           if (data.w === 1) water = new Uint8Array(cellsPerTile() ** 2 / 8).fill(255);
           else if (data.w) water = Uint8Array.from(atob(data.w), (c) => c.charCodeAt(0));
-          const tile = { key, i, j, data, water };
+          let ground: Float32Array | null = null;
+          if (data.g) {
+            const b = Uint8Array.from(atob(data.g), (c) => c.charCodeAt(0));
+            const dm = new Int16Array(b.buffer);
+            ground = Float32Array.from(dm, (v) => v / 10);
+          }
+          const tile = { key, i, j, data, water, ground };
           loaded.set(key, tile);
           pending.delete(key);
           changed();
@@ -199,4 +214,35 @@ export function isWater(x: number, z: number) {
   if (!t?.water) return false;
   const size = meta.tile;
   return waterAt(t, Math.floor((x - t.i * size) / meta.cell), Math.floor((z - t.j * size) / meta.cell));
+}
+
+/** Height of a tile's ground at (x, z), from its grid. */
+export function tileGround(t: Tile, x: number, z: number) {
+  const meta = getMeta();
+  if (!t.ground || !meta?.hstep || !meta.hn) return 0;
+  const n = meta.hn;
+  const fx = Math.max(0, Math.min(n - 1.0001, (x - t.i * meta.tile) / meta.hstep));
+  const fz = Math.max(0, Math.min(n - 1.0001, (z - t.j * meta.tile) / meta.hstep));
+  const q = Math.floor(fx);
+  const r = Math.floor(fz);
+  const a = fx - q;
+  const b = fz - r;
+  const g = t.ground;
+  // the same two triangles per cell as the physics ground (split corner to corner, +x−z to −x+z)
+  const h01 = g[r * n + q + 1];
+  const h10 = g[(r + 1) * n + q];
+  if (a + b <= 1) {
+    const h00 = g[r * n + q];
+    return h00 + a * (h01 - h00) + b * (h10 - h00);
+  }
+  const h11 = g[(r + 1) * n + q + 1];
+  return h11 + (1 - a) * (h10 - h11) + (1 - b) * (h01 - h11);
+}
+
+/** Ground height at (x, z), metres above the building's street (0 where the tile hasn't loaded). */
+export function groundAt(x: number, z: number) {
+  const meta = getMeta();
+  if (!meta?.hstep) return 0;
+  const t = loaded.get(tileKey(x, z));
+  return t ? tileGround(t, x, z) : 0;
 }

@@ -14,7 +14,7 @@ import { Street } from './world/Street';
 import { MapTiles } from './world/MapTiles';
 import { Cab } from './world/Cab';
 import { CabUi } from './ui/Cab';
-import { inGap, useMeta } from './world/map';
+import { groundAt, inGap, useMeta } from './world/map';
 import { Peers } from './world/Peers';
 import { Chat } from './ui/Chat';
 import { Minimap } from './ui/Minimap';
@@ -68,7 +68,7 @@ const OFF = new Set((new URLSearchParams(location.search).get('off') ?? '').spli
 
 const DEBUG = new URLSearchParams(location.search).has('debug');
 // For previews: ?debug exposes a way to press "use" from the console
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esUse: requestUse, esWorld: world, esSay: net.say, esRide: ride, esInput: input, esPeers: peers });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esUse: requestUse, esWorld: world, esSay: net.say, esRide: ride, esInput: input, esPeers: peers, esGround: groundAt });
 
 // Coconut palms along both footpaths (not in front of the entrance)
 const PALMS: PalmSpot[] = [
@@ -119,7 +119,7 @@ export default function App() {
         shadows="percentage"
         dpr={Math.min(gfx.settings.dpr, window.devicePixelRatio || 1)}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
-        camera={{ fov: 70, near: 0.08, far: 1600, position: [0, 1.85, 16.5] }}
+        camera={{ fov: 70, near: 0.1, far: 7000, position: [0, 1.85, 16.5] }}
         onCreated={({ gl }) => {
           if (DEBUG) Object.assign(window, { esGl: gl });
           gl.toneMapping = THREE.ACESFilmicToneMapping;

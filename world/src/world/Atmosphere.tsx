@@ -39,7 +39,8 @@ export function Atmosphere({ c }: { c: Conditions }) {
 
   const { scene } = useThree();
   useEffect(() => {
-    scene.fog = new THREE.FogExp2(fogColor, 0.0045 + rainy * 0.01 + foggy * 0.03 + cloud * 0.002);
+    // clear days see the hills a couple of kilometres off; rain and mist close in
+    scene.fog = new THREE.FogExp2(fogColor, 0.0011 + rainy * 0.01 + foggy * 0.03 + cloud * 0.0015);
     scene.background = fogColor;
   }, [scene, fogColor, rainy, foggy, cloud]);
 

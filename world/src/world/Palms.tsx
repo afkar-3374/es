@@ -100,6 +100,8 @@ const barkTexture = () =>
 export interface PalmSpot {
   x: number;
   z: number;
+  /** ground height (0 if left out) */
+  y?: number;
   scale?: number;
   turn?: number;
 }
@@ -170,7 +172,7 @@ function PalmTile({ items, trunk, crown, nuts, trunkMat, crownMat, nutMat }: { i
         e.set(0, it.turn, 0);
         q.setFromEuler(e);
         s.setScalar(it.scale);
-        v.set(it.x, 0, it.z);
+        v.set(it.x, it.y ?? 0, it.z);
         m.compose(v, q, s);
         trunks.current?.setMatrixAt(i, m);
       }
@@ -179,7 +181,7 @@ function PalmTile({ items, trunk, crown, nuts, trunkMat, crownMat, nutMat }: { i
       e.set(sway, it.turn + Math.sin(t * 0.7 + it.phase) * strength * 0.6, sway * 0.6);
       q.setFromEuler(e);
       s.setScalar(it.scale);
-      v.set(it.x + it.top.x, it.top.y, it.z + it.top.z);
+      v.set(it.x + it.top.x, (it.y ?? 0) + it.top.y, it.z + it.top.z);
       m.compose(v, q, s);
       crowns.current?.setMatrixAt(i, m);
       coconuts.current?.setMatrixAt(i, m);

@@ -6,6 +6,7 @@ import type { Collider, KinematicCharacterController } from '@dimforge/rapier3d-
 import { SPECS, setVehicleLights, VehicleModel, type VehicleKind } from './vehicleModels';
 import { ui, type Interactable } from './interact';
 import { insideBuilding, world } from './state';
+import { groundAt } from './map';
 import { me } from '../net/net';
 import { isTouch } from '../player/input';
 import { input } from '../player/input';
@@ -195,9 +196,10 @@ function MyVehicle({ kind, color, home, yaw }: { kind: VehicleKind; color: strin
       next.z = t.z;
       s.speed = 0;
     }
-    // flat town, nothing below ground (and the ground only follows you, not a parked vehicle)
-    if (next.y < spec.half[1]) {
-      next.y = spec.half[1];
+    // nothing below ground (a parked vehicle far away may have no ground loaded under it)
+    const floor = groundAt(next.x, next.z) + spec.half[1];
+    if (next.y < floor) {
+      next.y = floor;
       s.fall = 0;
     }
     b.setNextKinematicTranslation(next);

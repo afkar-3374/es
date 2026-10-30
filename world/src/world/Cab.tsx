@@ -6,6 +6,7 @@ import { cab, ROAD_SPEED, useCab, type Route } from './cab';
 import { canvasTexture } from './materials';
 import { ui } from './interact';
 import { world } from './state';
+import { groundAt } from './map';
 import { input } from '../player/input';
 import { engine } from '../audio/sfx';
 
@@ -146,7 +147,7 @@ function CabRide({ route }: { route: Route }) {
     let d = want - yaw.current;
     d = Math.atan2(Math.sin(d), Math.cos(d));
     yaw.current += d * Math.min(1, dt * 4 * Math.max(1, s.fast / 2));
-    g.position.set(x, 0, z);
+    g.position.set(x, groundAt(x, z), z);
     g.rotation.y = yaw.current;
     last.current = { x, z, left: { x: lx, z: lz } };
 
@@ -169,15 +170,17 @@ function CabRide({ route }: { route: Route }) {
         const around = yaw.current + look.current.yaw;
         const back = 7.5;
         const high = 3 - look.current.pitch * 4;
-        chase.set(x - Math.cos(around) * back, Math.max(1.2, high), z + Math.sin(around) * back);
+        const cx = x - Math.cos(around) * back;
+        const cz = z + Math.sin(around) * back;
+        chase.set(cx, Math.max(groundAt(cx, cz) + 1.2, g.position.y + high), cz);
         if (!chased.current) camera.position.copy(chase);
         chased.current = true;
         camera.position.lerp(chase, Math.min(1, dt * 5 * s.fast));
-        camera.lookAt(x + Math.cos(around) * 3, 1.3, z - Math.sin(around) * 3);
+        camera.lookAt(x + Math.cos(around) * 3, g.position.y + 1.3, z - Math.sin(around) * 3);
       }
       world.riding = { eye: eye.clone(), yaw: yaw.current - Math.PI / 2 };
       world.heading = yaw.current - Math.PI / 2 + look.current.yaw;
-      world.avatar.set(x, 0, z);
+      world.avatar.set(x, g.position.y, z);
     }
 
     // there

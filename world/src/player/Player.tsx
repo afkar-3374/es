@@ -5,6 +5,7 @@ import { CapsuleCollider, RigidBody, useRapier, type RapierRigidBody } from '@re
 import type { Collider, KinematicCharacterController } from '@dimforge/rapier3d-compat';
 import { input } from './input';
 import { insideBuilding, world } from '../world/state';
+import { groundAt } from '../world/map';
 import { ui } from '../world/interact';
 
 const HALF_HEIGHT = 0.55;
@@ -130,9 +131,10 @@ export function Player({ start = [0, 1.2, 16.5] as [number, number, number], sta
     const done = c.computedMovement();
     const p = b.translation();
     const next = { x: p.x + done.x, y: p.y + done.y, z: p.z + done.z };
-    // the town is flat and nothing is below ground: never sink into it
-    if (next.y < HALF_HEIGHT + RADIUS) {
-      next.y = HALF_HEIGHT + RADIUS;
+    // nothing is below ground: never sink into it (also holds you up before a tile's ground loads)
+    const floor = groundAt(next.x, next.z) + HALF_HEIGHT + RADIUS;
+    if (next.y < floor) {
+      next.y = floor;
       fall.current = 0;
     }
     b.setNextKinematicTranslation(next);

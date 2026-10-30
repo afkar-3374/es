@@ -10,7 +10,7 @@ import { world } from './state';
 import { Lamp, VirtualLight } from './Lamps';
 import { Palms, type PalmSpot } from './Palms';
 import { rng } from './layout';
-import { boxDistance, cellsPerTile, forgetTilesFarFrom, getMeta, hasTile, isWater, loadedTile, loadMeta, loadTile, onMapChange, RAIL, tileKey, waterRects, type Tile } from './map';
+import { boxDistance, cellsPerTile, forgetTilesFarFrom, getMeta, hasTile, isWater, loadedTile, loadMeta, loadTile, onMapChange, RAIL, tileGround, tileKey, waterRects, type Tile } from './map';
 
 /*
  * Kasaragod beyond the Electrosparkzz street: the real roads, buildings, rivers and sea
@@ -64,7 +64,7 @@ class Mesh {
 }
 
 /** A flat strip along a line (x, z pairs), `w` wide and `shift` to its left, at height y; UVs in metres / tile. */
-function strip(m: Mesh, pts: number[], w: number, y: number, c: THREE.Color, tile: number, shift = 0) {
+function strip(m: Mesh, pts: number[], w: number, y: number, c: THREE.Color, tile: number, shift = 0, hs?: number[]) {
   const n = pts.length / 2;
   if (n < 2) return;
   const L: [number, number][] = [];
@@ -113,12 +113,14 @@ function strip(m: Mesh, pts: number[], w: number, y: number, c: THREE.Color, til
       [R[i + 1], u1, v1],
       [L[i + 1], 0, v1],
     ] as const;
-    for (const [[x, z], u, v] of q) m.vert(x, y, z, 0, 1, 0, u, v, c);
+    const y0 = y + (hs ? hs[i] : 0);
+    const y1 = y + (hs ? hs[i + 1] : 0);
+    for (const [[x, z], u, v] of q) m.vert(x, v === v0 ? y0 : y1, z, 0, 1, 0, u, v, c);
   }
 }
 
-/** Short dashes along the middle of a line. */
-function dashes(m: Mesh, pts: number[], y: number, c: THREE.Color) {
+/** Short dashes along the middle of a line (at the line's heights, if it has them). */
+function dashes(m: Mesh, pts: number[], y: number, c: THREE.Color, hs?: number[]) {
   let phase = 0;
   for (let i = 2; i < pts.length; i += 2) {
     const ax = pts[i - 2];
@@ -128,7 +130,9 @@ function dashes(m: Mesh, pts: number[], y: number, c: THREE.Color) {
     const len = Math.hypot(dx, dz);
     for (let s = phase; s < len; s += 9) {
       const e = Math.min(s + 3, len);
-      strip(m, [ax + (dx * s) / len, az + (dz * s) / len, ax + (dx * e) / len, az + (dz * e) / len], 0.12, y, c, 1);
+      const h0 = hs ? hs[i / 2 - 1] + ((hs[i / 2] - hs[i / 2 - 1]) * s) / len : 0;
+      const h1 = hs ? hs[i / 2 - 1] + ((hs[i / 2] - hs[i / 2 - 1]) * e) / len : 0;
+      strip(m, [ax + (dx * s) / len, az + (dz * s) / len, ax + (dx * e) / len, az + (dz * e) / len], 0.12, y, c, 1, 0, [h0, h1]);
     }
     phase = (((phase - len) % 9) + 9) % 9;
   }
@@ -143,7 +147,10 @@ function buildTile(t: Tile) {
   const ground = new Mesh(); // tracks, footpaths, railway
   const paint = new Mesh();
   const walls = new Mesh();
+  const plain = new Mesh(); // parapets
   const roofs = new Mesh();
+  const tiled = new Mesh(); // clay-tile roofs
+  const tanks = new Mesh();
   const water = new Mesh();
   const c = new THREE.Color();
   const white = new THREE.Color('#efeee8');
@@ -151,25 +158,30 @@ function buildTile(t: Tile) {
   const heads = new Mesh();
   const glows = new Mesh();
   const lamps: [number, number, number][] = [];
+  const G = (x: number, z: number) => tileGround(t, x, z);
+  // (a lamp post never stands in another road)
+  const onRoad = roadTester(t, 0.5);
 
   for (const r of t.data.b) {
-    const [cls, w] = r;
-    const pts = r.slice(3).map((v, k) => v / 10 + (k % 2 ? oz : ox));
-    if (cls <= 4) streetLamps(pts, w, cls, posts, heads, glows, lamps);
+    const [cls, w, bridge] = r;
+    // every 12 m, so the road follows the lie of the land; a bridge runs level from end to end
+    const pts = densify(r.slice(3).map((v, k) => v / 10 + (k % 2 ? oz : ox)), 12);
+    const hs = roadHeights(pts, bridge === 1, G);
+    if (cls <= 4) streetLamps(pts, w, cls, posts, heads, glows, lamps, onRoad, G);
     if (cls === RAIL) {
-      strip(ground, pts, w, ROAD_Y[cls], c.set('#7d7368'), 2);
-      for (const side of [-0.75, 0.75]) strip(paint, pts, 0.08, ROAD_Y[cls] + 0.002, c.set('#4a4a4f'), 1, side);
+      strip(ground, pts, w, ROAD_Y[cls], c.set('#7d7368'), 2, 0, hs);
+      for (const side of [-0.75, 0.75]) strip(paint, pts, 0.08, ROAD_Y[cls] + 0.002, c.set('#4a4a4f'), 1, side, hs);
       continue;
     }
     if (cls >= 6) {
-      strip(ground, pts, w, ROAD_Y[cls], c.set(cls === 6 ? '#a8673f' : '#b9b4aa'), 2);
+      strip(ground, pts, w, ROAD_Y[cls], c.set(cls === 6 ? '#a8673f' : '#b9b4aa'), 2, 0, hs);
       continue;
     }
-    strip(asphalt, pts, w, ROAD_Y[cls], c.set('#ffffff'), 6);
-    if (cls <= 3) dashes(paint, pts, ROAD_Y[cls] + 0.004, white);
+    strip(asphalt, pts, w, ROAD_Y[cls], c.set('#ffffff'), 6, 0, hs);
+    if (cls <= 3) dashes(paint, pts, ROAD_Y[cls] + 0.004, white, hs);
   }
 
-  for (const b of t.data.h) {
+  t.data.h.forEach((b, n) => {
     const [h, seed] = b;
     const ring: [number, number][] = [];
     for (let k = 2; k + 1 < b.length; k += 2) ring.push([b[k] / 10 + ox, b[k + 1] / 10 + oz]);
@@ -179,6 +191,16 @@ function buildTile(t: Tile) {
       const [x1, z1] = ring[(k + 1) % ring.length];
       A += x0 * z1 - x1 * z0;
     }
+    const box = t.data.o[n];
+    const floorArea = Math.abs(A) / 2;
+    // on a slope it stands on its lowest corner (the walls go down to meet the ground)
+    let base = Infinity;
+    for (const [x, z] of ring) base = Math.min(base, G(x, z));
+    if (!Number.isFinite(base)) base = 0;
+    const top = base + h;
+    // Kerala: most homes have a sloped roof of clay tiles; bigger and taller buildings are flat concrete
+    const house = !!box && floorArea < 260 && h < 8 && seed % 100 < 62;
+    const parapet = house ? 0 : 0.9;
     const wall = c.set(PLASTER[seed % PLASTER.length]).clone().multiplyScalar(0.92 + ((seed >> 3) % 8) / 50);
     let u = 0;
     for (let k = 0; k < ring.length; k++) {
@@ -190,24 +212,48 @@ function buildTile(t: Tile) {
       const s = A > 0 ? 1 : -1;
       const nx = (s * (z1 - z0)) / len;
       const nz = (-s * (x1 - x0)) / len;
-      const u0 = u / 2.5;
-      const u1 = (u + len) / 2.5;
-      const v1 = h / 2.5;
-      walls.vert(x0, 0, z0, nx, 0, nz, u0, 0, wall);
-      walls.vert(x1, 0, z1, nx, 0, nz, u1, 0, wall);
-      walls.vert(x1, h, z1, nx, 0, nz, u1, v1, wall);
-      walls.vert(x0, 0, z0, nx, 0, nz, u0, 0, wall);
-      walls.vert(x1, h, z1, nx, 0, nz, u1, v1, wall);
-      walls.vert(x0, h, z0, nx, 0, nz, u0, v1, wall);
+      // the façade texture is one window bay (3 m) by one floor (3.2 m)
+      const u0 = u / BAY;
+      const u1 = (u + len) / BAY;
+      const v1 = h / FLOOR_H;
+      walls.vert(x0, base, z0, nx, 0, nz, u0, 0, wall);
+      walls.vert(x1, base, z1, nx, 0, nz, u1, 0, wall);
+      walls.vert(x1, top, z1, nx, 0, nz, u1, v1, wall);
+      walls.vert(x0, base, z0, nx, 0, nz, u0, 0, wall);
+      walls.vert(x1, top, z1, nx, 0, nz, u1, v1, wall);
+      walls.vert(x0, top, z0, nx, 0, nz, u0, v1, wall);
+      // a low wall round a flat roof
+      if (parapet) {
+        const rim = top + parapet;
+        plain.vert(x0, top, z0, nx, 0, nz, 0, 0, wall);
+        plain.vert(x1, top, z1, nx, 0, nz, 0, 0, wall);
+        plain.vert(x1, rim, z1, nx, 0, nz, 0, 0, wall);
+        plain.vert(x0, top, z0, nx, 0, nz, 0, 0, wall);
+        plain.vert(x1, rim, z1, nx, 0, nz, 0, 0, wall);
+        plain.vert(x0, rim, z0, nx, 0, nz, 0, 0, wall);
+      }
       u += len;
+    }
+    if (house) {
+      hipRoof(tiled, box, ox, oz, top, c.set(TILE_RED[seed % TILE_RED.length]));
+      return;
     }
     const roof = c.set(ROOF[(seed >> 5) % ROOF.length]);
     const tris = THREE.ShapeUtils.triangulateShape(
       ring.map(([x, z]) => new THREE.Vector2(x, z)),
       []
     );
-    for (const tri of tris) for (const k of tri) roofs.vert(ring[k][0], h, ring[k][1], 0, 1, 0, ring[k][0] / 3, ring[k][1] / 3, roof);
-  }
+    for (const tri of tris) for (const k of tri) roofs.vert(ring[k][0], top + 0.02, ring[k][1], 0, 1, 0, ring[k][0] / 3, ring[k][1] / 3, roof);
+    // the black water tank nearly every Kerala roof has
+    if (box && floorArea > 30 && seed % 10 < 7) {
+      const [cx, cz, hx, hz, ang] = box;
+      const fu = ((((seed >> 2) % 7) / 6) * 2 - 1) * Math.max(0, hx / 10 - 1.2);
+      const fv = ((((seed >> 4) % 5) / 4) * 2 - 1) * Math.max(0, hz / 10 - 1.2);
+      const x = cx / 10 + ox + fu * Math.cos(ang) - fv * Math.sin(ang);
+      const z = cz / 10 + oz + fu * Math.sin(ang) + fv * Math.cos(ang);
+      tanks.add(TANK, new THREE.Matrix4().makeTranslation(x, top, z), BLACK);
+    }
+  });
 
   if (t.water) {
     const cell = getMeta()!.cell;
@@ -225,22 +271,197 @@ function buildTile(t: Tile) {
         [x1, z1],
         [x0, z1],
       ];
-      for (const [x, z] of q) water.vert(x, 0.008, z, 0, 1, 0, x / 40, z / 40, blue);
+      for (const [x, z] of q) water.vert(x, G(x, z) + 0.008, z, 0, 1, 0, x / 40, z / 40, blue);
     }
   }
 
   return {
+    land: landGeometry(t),
     asphalt: asphalt.geometry(),
     ground: ground.geometry(),
     paint: paint.geometry(),
     walls: walls.geometry(),
+    plain: plain.geometry(),
     roofs: roofs.geometry(),
+    tiled: tiled.geometry(),
+    tanks: tanks.geometry(),
     water: water.geometry(),
     posts: posts.geometry(),
     heads: heads.geometry(),
     glows: glows.geometry(),
     lamps,
   };
+}
+
+/** One window bay along a wall, and one floor up it (the façade texture's size) */
+const BAY = 3;
+const FLOOR_H = 3.2;
+const TILE_RED = ['#b4543a', '#a5492f', '#c06447', '#9b4a35'];
+const BLACK = new THREE.Color('#2a2b2e');
+const TANK = new THREE.CylinderGeometry(0.62, 0.62, 1.15, 8, 1).translate(0, 0.6, 0);
+
+/**
+ * A hipped roof of clay tiles over a building's box (centre, half sizes, angle; decimetres
+ * for position and size), with the eaves reaching out past the walls.
+ */
+function hipRoof(m: Mesh, box: number[], ox: number, oz: number, h: number, colour: THREE.Color) {
+  const [cx, cz, hx, hz, ang] = box;
+  const x = cx / 10 + ox;
+  const z = cz / 10 + oz;
+  const co = Math.cos(ang);
+  const si = Math.sin(ang);
+  // the ridge runs along the longer side
+  const long = hx >= hz;
+  const a = (long ? hx : hz) / 10 + 0.5;
+  const b = (long ? hz : hx) / 10 + 0.5;
+  const rise = Math.min(2.6, b * 0.6);
+  const r = Math.max(0, a - b);
+  // corners and ridge ends in (along, across) space, then out into the world
+  const P = (u: number, v: number, y: number): [number, number, number] => {
+    const [lu, lv] = long ? [u, v] : [v, u];
+    return [x + lu * co - lv * si, y, z + lu * si + lv * co];
+  };
+  const e = h - 0.25; // eaves a little below the top of the walls
+  const c1 = P(-a, -b, e);
+  const c2 = P(a, -b, e);
+  const c3 = P(a, b, e);
+  const c4 = P(-a, b, e);
+  const r1 = P(-r, 0, h + rise);
+  const r2 = P(r, 0, h + rise);
+  const tri = (p: number[], q: number[], s: number[]) => {
+    // facing up, whichever way round
+    const ux = q[0] - p[0], uy = q[1] - p[1], uz = q[2] - p[2];
+    const vx = s[0] - p[0], vy = s[1] - p[1], vz = s[2] - p[2];
+    let nx = uy * vz - uz * vy;
+    let ny = uz * vx - ux * vz;
+    let nz = ux * vy - uy * vx;
+    if (ny < 0) {
+      [q, s] = [s, q];
+      nx = -nx;
+      ny = -ny;
+      nz = -nz;
+    }
+    const L = Math.hypot(nx, ny, nz) || 1;
+    for (const pt of [p, q, s]) m.vert(pt[0], pt[1], pt[2], nx / L, ny / L, nz / L, pt[0] / 1.6, (pt[2] + pt[1]) / 1.6, colour);
+  };
+  tri(c1, c2, r2);
+  tri(c1, r2, r1);
+  tri(c3, c4, r1);
+  tri(c3, r1, r2);
+  tri(c2, c3, r2);
+  tri(c4, c1, r1);
+}
+
+/** One bay of a Kerala building's front: plaster, a window with its frame and grill, the sunshade above. */
+function facadeTexture() {
+  const S = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  // plaster, a little weathered towards the bottom
+  const wash = g.createLinearGradient(0, 0, 0, S);
+  wash.addColorStop(0, '#ffffff');
+  wash.addColorStop(1, '#e9e6df');
+  g.fillStyle = wash;
+  g.fillRect(0, 0, S, S);
+  for (let i = 0; i < 900; i++) {
+    g.fillStyle = `rgba(120,110,95,${Math.random() * 0.05})`;
+    g.fillRect(Math.random() * S, Math.random() * S, 2, 2);
+  }
+  // (the texture's top is the top of a floor: v grows upwards)
+  const wx0 = 68, wx1 = 188, wy0 = 70, wy1 = 182;
+  // the sunshade slab over the window and its shadow
+  g.fillStyle = 'rgba(0,0,0,0.16)';
+  g.fillRect(wx0 - 18, wy0 - 10, wx1 - wx0 + 36, 22);
+  g.fillStyle = '#d9d5cc';
+  g.fillRect(wx0 - 18, wy0 - 18, wx1 - wx0 + 36, 10);
+  // frame, glass, grill
+  g.fillStyle = '#f4f2ee';
+  g.fillRect(wx0 - 6, wy0 - 6, wx1 - wx0 + 12, wy1 - wy0 + 12);
+  const glass = g.createLinearGradient(0, wy0, 0, wy1);
+  glass.addColorStop(0, '#3d5566');
+  glass.addColorStop(1, '#1f2a33');
+  g.fillStyle = glass;
+  g.fillRect(wx0, wy0, wx1 - wx0, wy1 - wy0);
+  g.fillStyle = 'rgba(255,255,255,0.12)';
+  g.beginPath();
+  g.moveTo(wx0, wy1);
+  g.lineTo(wx0 + 40, wy0);
+  g.lineTo(wx0 + 60, wy0);
+  g.lineTo(wx0 + 20, wy1);
+  g.fill();
+  g.fillStyle = '#6b6f73';
+  for (let x = wx0 + 15; x < wx1; x += 15) g.fillRect(x, wy0, 3, wy1 - wy0);
+  g.fillStyle = '#f4f2ee';
+  g.fillRect((wx0 + wx1) / 2 - 3, wy0, 6, wy1 - wy0);
+  // the sill
+  g.fillStyle = '#d4d0c7';
+  g.fillRect(wx0 - 10, wy1 + 4, wx1 - wx0 + 20, 7);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+
+/** A line (x, z pairs) with extra points so no stretch is longer than `step` metres. */
+function densify(pts: number[], step: number) {
+  const out = [pts[0], pts[1]];
+  for (let i = 2; i < pts.length; i += 2) {
+    const ax = pts[i - 2];
+    const az = pts[i - 1];
+    const n = Math.ceil(Math.hypot(pts[i] - ax, pts[i + 1] - az) / step);
+    for (let k = 1; k <= n; k++) out.push(ax + ((pts[i] - ax) * k) / n, az + ((pts[i + 1] - az) * k) / n);
+  }
+  return out;
+}
+
+/** The ground's height at each point of a road; a bridge runs straight from one end to the other. */
+function roadHeights(pts: number[], bridge: boolean, G: (x: number, z: number) => number) {
+  const n = pts.length / 2;
+  if (!bridge) return Array.from({ length: n }, (_, k) => G(pts[k * 2], pts[k * 2 + 1]));
+  const along = [0];
+  for (let k = 1; k < n; k++) along.push(along[k - 1] + Math.hypot(pts[k * 2] - pts[k * 2 - 2], pts[k * 2 + 1] - pts[k * 2 - 1]));
+  const total = along[n - 1] || 1;
+  const h0 = G(pts[0], pts[1]);
+  const h1 = G(pts[n * 2 - 2], pts[n * 2 - 1]);
+  return along.map((d) => h0 + ((h1 - h0) * d) / total);
+}
+
+/** The tile's ground: a grid of its heights (or nothing, where the ground is flat), split into
+ *  triangles the same way as its physics ground so you stand exactly on what you see. */
+function landGeometry(t: Tile) {
+  const meta = getMeta()!;
+  if (!t.ground || !meta.hstep || !meta.hn) return null;
+  const n = meta.hn;
+  const step = meta.hstep;
+  const pos = new Float32Array(n * n * 3);
+  const uv = new Float32Array(n * n * 2);
+  for (let r = 0; r < n; r++)
+    for (let q = 0; q < n; q++) {
+      const k = r * n + q;
+      const x = t.i * meta.tile + q * step;
+      const z = t.j * meta.tile + r * step;
+      pos.set([x, t.ground[k] - 0.03, z], k * 3);
+      uv.set([x / 4, z / 4], k * 2);
+    }
+  const index: number[] = [];
+  for (let r = 0; r < n - 1; r++)
+    for (let q = 0; q < n - 1; q++) {
+      const a = r * n + q; // (x, z)
+      const b = r * n + q + 1; // (x + 1, z)
+      const c = (r + 1) * n + q; // (x, z + 1)
+      const d = (r + 1) * n + q + 1; // (x + 1, z + 1)
+      // facing up, split along b–c
+      index.push(a, c, b, b, c, d);
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setIndex(index);
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  return g;
 }
 
 /** The hand-made street and its shops (they have their own lamps and palms). */
@@ -254,7 +475,7 @@ const GLOW = new THREE.PlaneGeometry(18, 18).rotateX(-Math.PI / 2);
 const STEEL = new THREE.Color('#6b7075');
 
 /** Street lights along a road: on alternate sides of big roads, one side of small ones, leaning over it. */
-function streetLamps(pts: number[], w: number, cls: number, posts: Mesh, heads: Mesh, glows: Mesh, lamps: [number, number, number][]) {
+function streetLamps(pts: number[], w: number, cls: number, posts: Mesh, heads: Mesh, glows: Mesh, lamps: [number, number, number][], onRoad: (x: number, z: number) => boolean, G: (x: number, z: number) => number) {
   const every = cls <= 2 ? 30 : 42;
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
@@ -278,22 +499,54 @@ function streetLamps(pts: number[], w: number, cls: number, posts: Mesh, heads: 
       const nz = (-dx / len) * side;
       const px = ax + dx * f + nx * (w / 2 + 0.7);
       const pz = az + dz * f + nz * (w / 2 + 0.7);
-      if (inSite(px, pz)) continue;
+      if (inSite(px, pz) || onRoad(px, pz)) continue;
       // the arm points back over the road
       q.setFromAxisAngle(up, Math.atan2(nz, -nx));
-      m.compose(new THREE.Vector3(px, 0, pz), q, new THREE.Vector3(1, 1, 1));
+      const gy = G(px, pz);
+      m.compose(new THREE.Vector3(px, gy, pz), q, new THREE.Vector3(1, 1, 1));
       posts.add(POLE, m, STEEL);
       posts.add(ARM, m, STEEL);
       heads.add(HEAD, m, white1);
       const hx = px - nx * 1.45;
       const hz = pz - nz * 1.45;
-      glows.add(GLOW, new THREE.Matrix4().makeTranslation(hx, 0.05, hz), white1);
-      lamps.push([hx, 6.7, hz]);
+      glows.add(GLOW, new THREE.Matrix4().makeTranslation(hx, G(hx, hz) + 0.05, hz), white1);
+      lamps.push([hx, gy + 6.7, hz]);
     }
     walked += len;
   }
 }
 const white1 = new THREE.Color('#ffffff');
+
+/** A quick test for "is (x, z) on any of this tile's roads (with `pad` metres to spare)?" */
+function roadTester(t: Tile, pad: number) {
+  const size = getMeta()!.tile;
+  const ox = t.i * size;
+  const oz = t.j * size;
+  const CELL = 40;
+  const N = size / CELL;
+  const cells: number[][][] = Array.from({ length: N * N }, () => []);
+  for (const r of t.data.b) {
+    const reach = r[1] / 2 + pad;
+    for (let k = 5; k + 1 < r.length; k += 2) {
+      const ax = r[k - 2] / 10 + ox;
+      const az = r[k - 1] / 10 + oz;
+      const bx = r[k] / 10 + ox;
+      const bz = r[k + 1] / 10 + oz;
+      for (let j = Math.max(0, Math.floor((Math.min(az, bz) - reach - oz) / CELL)); j <= Math.min(N - 1, Math.floor((Math.max(az, bz) + reach - oz) / CELL)); j++)
+        for (let i = Math.max(0, Math.floor((Math.min(ax, bx) - reach - ox) / CELL)); i <= Math.min(N - 1, Math.floor((Math.max(ax, bx) + reach - ox) / CELL)); i++) cells[j * N + i].push([ax, az, bx, bz, reach]);
+    }
+  }
+  return (x: number, z: number) => {
+    const i = Math.floor((x - ox) / CELL);
+    const j = Math.floor((z - oz) / CELL);
+    if (i < 0 || j < 0 || i >= N || j >= N) return false;
+    return cells[j * N + i].some(([ax, az, bx, bz, reach]) => {
+      const L2 = (bx - ax) ** 2 + (bz - az) ** 2 || 1e-9;
+      const u = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / L2));
+      return Math.hypot(x - (ax + (bx - ax) * u), z - (az + (bz - az) * u)) < reach;
+    });
+  };
+}
 
 /** Coconut palms over the open land: in groves, off the roads, clear of buildings and water. */
 function scatterPalms(t: Tile): PalmSpot[] {
@@ -303,22 +556,12 @@ function scatterPalms(t: Tile): PalmSpot[] {
   const oz = t.j * size;
   const CELL = 40;
   const N = size / CELL;
-  const roadsIn: number[][][] = Array.from({ length: N * N }, () => []);
+  const onRoad = roadTester(t, 2.5);
   const boxesIn: number[][][] = Array.from({ length: N * N }, () => []);
   const mark = (list: number[][][], x0: number, z0: number, x1: number, z1: number, item: number[]) => {
     for (let j = Math.max(0, Math.floor((z0 - oz) / CELL)); j <= Math.min(N - 1, Math.floor((z1 - oz) / CELL)); j++)
       for (let i = Math.max(0, Math.floor((x0 - ox) / CELL)); i <= Math.min(N - 1, Math.floor((x1 - ox) / CELL)); i++) list[j * N + i].push(item);
   };
-  for (const r of t.data.b) {
-    const reach = r[1] / 2 + 2.5;
-    for (let k = 5; k + 1 < r.length; k += 2) {
-      const ax = r[k - 2] / 10 + ox;
-      const az = r[k - 1] / 10 + oz;
-      const bx = r[k] / 10 + ox;
-      const bz = r[k + 1] / 10 + oz;
-      mark(roadsIn, Math.min(ax, bx) - reach, Math.min(az, bz) - reach, Math.max(ax, bx) + reach, Math.max(az, bz) + reach, [ax, az, bx, bz, reach]);
-    }
-  }
   for (const [cx, cz, hx, hz, ang] of t.data.o) {
     const x = cx / 10 + ox;
     const z = cz / 10 + oz;
@@ -337,12 +580,7 @@ function scatterPalms(t: Tile): PalmSpot[] {
       if (rand() > grove * grove * 0.75) continue;
       if (x >= ox + size || z >= oz + size || inSite(x, z) || isWater(x, z)) continue;
       const cell = Math.floor((z - oz) / CELL) * N + Math.floor((x - ox) / CELL);
-      const onRoad = roadsIn[cell].some(([ax, az, bx, bz, reach]) => {
-        const L2 = (bx - ax) ** 2 + (bz - az) ** 2 || 1e-9;
-        const u = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / L2));
-        return Math.hypot(x - (ax + (bx - ax) * u), z - (az + (bz - az) * u)) < reach;
-      });
-      if (onRoad) continue;
+      if (onRoad(x, z)) continue;
       const inBuilding = boxesIn[cell].some(([bx, bz, hx, hz, ang]) => {
         const c = Math.cos(ang);
         const s = Math.sin(ang);
@@ -351,7 +589,7 @@ function scatterPalms(t: Tile): PalmSpot[] {
         return Math.abs(u) < hx && Math.abs(v) < hz;
       });
       if (inBuilding) continue;
-      out.push({ x, z, scale: 0.8 + rand() * 0.45, turn: rand() * Math.PI * 2 });
+      out.push({ x, z, y: tileGround(t, x, z), scale: 0.8 + rand() * 0.45, turn: rand() * Math.PI * 2 });
       if (out.length >= 520) return out;
     }
   return out;
@@ -429,6 +667,7 @@ function buildSigns(t: Tile) {
   signs.forEach(([sx, sz, ang, metres], n) => {
     const x = sx / 10 + t.i * size;
     const z = sz / 10 + t.j * size;
+    const gy = tileGround(t, x, z);
     // the post
     const p = 0.05;
     for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
@@ -437,7 +676,7 @@ function buildSigns(t: Tile) {
       const bx = x + nx * p + nz * p;
       const bz = z + nz * p - nx * p;
       const q = [[ax, 0, az], [bx, 0, bz], [bx, TOP, bz], [ax, 0, az], [bx, TOP, bz], [ax, TOP, az]] as const;
-      for (const [qx, qy, qz] of q) posts.vert(qx, qy, qz, nx, 0, nz, 0, 0, grey);
+      for (const [qx, qy, qz] of q) posts.vert(qx, qy + gy, qz, nx, 0, nz, 0, 0, grey);
     }
     // the board runs the way to go, with a label on each face (the arrow points along it from both sides)
     const dx = Math.cos(ang);
@@ -470,7 +709,7 @@ function buildSigns(t: Tile) {
         [to, TOP, u1, v1],
         [from, TOP, u0, v1],
       ] as const;
-      for (const [[qx, qz], qy, qu, qv] of q) boards.vert(qx + nx * 0.012, qy, qz + nz * 0.012, nx, 0, nz, qu, qv, white);
+      for (const [[qx, qz], qy, qu, qv] of q) boards.vert(qx + nx * 0.012, qy + gy, qz + nz * 0.012, nx, 0, nz, qu, qv, white);
     });
   });
   const texture = new THREE.CanvasTexture(canvas);
@@ -492,10 +731,24 @@ function useTileColliders(t: Tile) {
     const made: Collider[] = [];
     const q = new THREE.Quaternion();
     const up = new THREE.Vector3(0, 1, 0);
+    // the ground itself: a height grid (rows run along z, columns along x)
+    const meta = getMeta()!;
+    if (t.ground && meta.hn) {
+      const n = meta.hn;
+      const heights = new Float32Array(n * n);
+      for (let iz = 0; iz < n; iz++) for (let ix = 0; ix < n; ix++) heights[iz + ix * n] = t.ground[iz * n + ix];
+      const desc = rapier.ColliderDesc.heightfield(n - 1, n - 1, heights, { x: size, y: 1, z: size }).setTranslation(ox + size / 2, 0, oz + size / 2);
+      made.push(physics.createCollider(desc));
+    }
     for (const [cx, cz, hx, hz, ang, h] of t.data.o) {
       q.setFromAxisAngle(up, -ang);
+      const x = cx / 10 + ox;
+      const z = cz / 10 + oz;
+      // standing on its lowest corner, as it's drawn
+      const r = Math.hypot(hx, hz) / 10;
+      const base = Math.min(tileGround(t, x - r, z - r), tileGround(t, x + r, z - r), tileGround(t, x - r, z + r), tileGround(t, x + r, z + r), tileGround(t, x, z));
       const desc = rapier.ColliderDesc.cuboid(hx / 10, h / 2, hz / 10)
-        .setTranslation(cx / 10 + ox, h / 2, cz / 10 + oz)
+        .setTranslation(x, base + h / 2, z)
         .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w });
       made.push(physics.createCollider(desc));
     }
@@ -524,7 +777,9 @@ function useTileColliders(t: Tile) {
         }
       }
       for (const [a, b, e, f] of waterRects(t, (cx, cz) => open[cz * N + cx] === 1)) {
-        const desc = rapier.ColliderDesc.cuboid(((e - a) * cell) / 2, 0.7, ((f - b) * cell) / 2).setTranslation(ox + ((a + e) * cell) / 2, 0.5, oz + ((b + f) * cell) / 2);
+        const wx = ox + ((a + e) * cell) / 2;
+        const wz = oz + ((b + f) * cell) / 2;
+        const desc = rapier.ColliderDesc.cuboid(((e - a) * cell) / 2, 0.7, ((f - b) * cell) / 2).setTranslation(wx, tileGround(t, wx, wz) + 0.5, wz);
         made.push(physics.createCollider(desc));
       }
     }
@@ -546,6 +801,10 @@ interface Mats {
   ground: THREE.MeshStandardMaterial;
   paint: THREE.MeshStandardMaterial;
   walls: THREE.MeshStandardMaterial;
+  land: THREE.MeshStandardMaterial;
+  plain: THREE.MeshStandardMaterial;
+  tiled: THREE.MeshStandardMaterial;
+  tank: THREE.MeshStandardMaterial;
   roofs: THREE.MeshStandardMaterial;
   water: THREE.MeshStandardMaterial;
   post: THREE.MeshStandardMaterial;
@@ -576,12 +835,16 @@ function TileView({ tile, mats, near }: { tile: Tile; mats: Mats; near: boolean 
   );
   return (
     <group>
+      {built.land && <mesh geometry={built.land} material={mats.land} receiveShadow raycast={noRaycast} />}
       {built.water && <mesh geometry={built.water} material={mats.water} receiveShadow raycast={noRaycast} />}
       {built.ground && <mesh geometry={built.ground} material={mats.ground} receiveShadow raycast={noRaycast} />}
       {built.asphalt && <mesh geometry={built.asphalt} material={mats.asphalt} receiveShadow raycast={noRaycast} />}
       {built.paint && <mesh geometry={built.paint} material={mats.paint} receiveShadow raycast={noRaycast} />}
       {built.walls && <mesh geometry={built.walls} material={mats.walls} castShadow={near} receiveShadow raycast={noRaycast} />}
       {built.roofs && <mesh geometry={built.roofs} material={mats.roofs} castShadow={near} receiveShadow raycast={noRaycast} />}
+      {built.plain && <mesh geometry={built.plain} material={mats.plain} castShadow={near} receiveShadow raycast={noRaycast} />}
+      {built.tiled && <mesh geometry={built.tiled} material={mats.tiled} castShadow={near} receiveShadow raycast={noRaycast} />}
+      {built.tanks && <mesh geometry={built.tanks} material={mats.tank} castShadow={near} raycast={noRaycast} />}
       {signs && boardMat && (
         <>
           <mesh geometry={signs.posts} material={mats.post} castShadow raycast={noRaycast} />
@@ -613,13 +876,66 @@ function glowTexture() {
   return t;
 }
 
+/**
+ * Kasaragod beyond the tiles you're near: the whole district's hills as one coarse mesh,
+ * painted with the map's overview (land, roads, rivers, the sea), a little below the
+ * detailed ground so it only shows past it.
+ */
+function FarLand() {
+  const [meta, setMeta] = useState(getMeta);
+  useEffect(() => onMapChange(() => setMeta(getMeta())), []);
+  const far = meta?.far;
+  const geometry = useMemo(() => {
+    if (!far || !meta) return null;
+    const heights = new Int16Array(Uint8Array.from(atob(far.g), (c) => c.charCodeAt(0)).buffer);
+    const { nx, nz, step, x0, z0 } = far;
+    const pos = new Float32Array(nx * nz * 3);
+    const uv = new Float32Array(nx * nz * 2);
+    const w = meta.overview.w * meta.overview.mpp;
+    const h = meta.overview.h * meta.overview.mpp;
+    for (let r = 0; r < nz; r++)
+      for (let q = 0; q < nx; q++) {
+        const k = r * nx + q;
+        const x = x0 + q * step;
+        const z = z0 + r * step;
+        // well under the detailed ground (the coarse grid can sit higher on a slope)
+        pos.set([x, heights[k] - 8, z], k * 3);
+        uv.set([(x - meta.overview.x0) / w, 1 - (z - meta.overview.z0) / h], k * 2);
+      }
+    const index: number[] = [];
+    for (let r = 0; r < nz - 1; r++)
+      for (let q = 0; q < nx - 1; q++) {
+        const a = r * nx + q;
+        index.push(a, a + nx, a + 1, a + 1, a + nx, a + nx + 1);
+      }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    g.setIndex(index);
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    return g;
+  }, [far, meta]);
+  const material = useMemo(() => {
+    const tex = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}map/overview.png`);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    // greener than the map's paper colour, like the land up close
+    return new THREE.MeshStandardMaterial({ map: tex, color: '#9fbf7a', roughness: 1, polygonOffset: true, polygonOffsetFactor: 8, polygonOffsetUnits: 16 });
+  }, []);
+  useEffect(() => () => geometry?.dispose(), [geometry]);
+  if (!geometry) return null;
+  return <mesh geometry={geometry} material={material} receiveShadow raycast={noRaycast} />;
+}
+
 /** Grass under everything, following the camera (in steps, so the texture stays put). */
 function Ground({ mat }: { mat: THREE.MeshStandardMaterial }) {
   const mesh = useRef<THREE.Mesh>(null);
   const camera = useThree((s) => s.camera);
   useFrame(() => {
     if (!mesh.current) return;
-    mesh.current.position.set(Math.round(camera.position.x / 8) * 8, -0.03, Math.round(camera.position.z / 8) * 8);
+    // only where no tile has its own ground (past the map, or before a tile loads): far down out of the way
+    mesh.current.position.set(Math.round(camera.position.x / 8) * 8, getMeta()?.hstep ? -45 : -0.03, Math.round(camera.position.z / 8) * 8);
   });
   return (
     <mesh ref={mesh} rotation-x={-Math.PI / 2} material={mat} receiveShadow raycast={noRaycast}>
@@ -636,17 +952,24 @@ function Ground({ mat }: { mat: THREE.MeshStandardMaterial }) {
  */
 function Bounds() {
   const { world: physics, rapier } = useRapier();
+  // previews (?debug): the physics, to check the ground by casting rays at it
+  useEffect(() => {
+    if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esPhysics: physics, esRapier: rapier });
+  }, [physics, rapier]);
   const [meta, setMeta] = useState(getMeta);
   useEffect(() => onMapChange(() => setMeta(getMeta())), []);
   const ground = useRef<Collider | null>(null);
+  // flat maps: a ground box that follows you. With hills each tile has its own ground instead.
+  const flat = meta ? !meta.hstep : true;
   useEffect(() => {
+    if (!flat) return;
     const c = physics.createCollider(rapier.ColliderDesc.cuboid(200, 1, 200).setTranslation(world.player.x, -1, world.player.z));
     ground.current = c;
     return () => {
       ground.current = null;
       if (physics.getCollider(c.handle)) physics.removeCollider(c, false);
     };
-  }, [physics, rapier]);
+  }, [physics, rapier, flat]);
   useFrame(() => {
     const c = ground.current;
     if (!c) return;
@@ -662,7 +985,8 @@ function Bounds() {
     const z0 = b.z0 - 2000;
     const z1 = b.z1 + 2000;
     const made: Collider[] = [];
-    const wall = (cx: number, cz: number, hx: number, hz: number) => made.push(physics.createCollider(rapier.ColliderDesc.cuboid(hx, 10, hz).setTranslation(cx, 10, cz)));
+    // (tall: the hills inland rise hundreds of metres)
+    const wall = (cx: number, cz: number, hx: number, hz: number) => made.push(physics.createCollider(rapier.ColliderDesc.cuboid(hx, 1200, hz).setTranslation(cx, 0, cz)));
     for (let x = x0; x < x1; x += 1000) {
       const w = Math.min(1000, x1 - x) / 2;
       wall(x + w, z0, w, 0.5);
@@ -683,8 +1007,11 @@ function Bounds() {
 export function MapTiles() {
   const asphalt = usePBR('asphalt_02', [1, 1]);
   const plaster = usePBR('painted_plaster_wall', [1, 1], { normalScale: 0.6 });
+  const clay = usePBR('clay_roof_tiles', [1, 1]);
   // Kerala green (the texture alone reads as dry ground)
   const grass = usePBR('sparse_grass', [3000, 3000], { tint: '#a9cf7c' });
+  // the same grass on the hills (their UVs are in 4 m steps)
+  const land = usePBR('sparse_grass', [1, 1], { tint: '#a9cf7c' });
   const mats = useMemo<Mats>(() => {
     // flat layers lie a hair apart; push the lower ones back so far roads don't flicker
     const offset = <M extends THREE.Material>(m: M, units: number) => Object.assign(m, { polygonOffset: true, polygonOffsetFactor: units, polygonOffsetUnits: units * 2 });
@@ -693,7 +1020,11 @@ export function MapTiles() {
       asphalt: offset(Object.assign(asphalt, { side: THREE.DoubleSide }), 0),
       ground: offset(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }), 2),
       paint: offset(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide }), -2),
-      walls: Object.assign(plaster, { vertexColors: true, side: THREE.DoubleSide }),
+      walls: new THREE.MeshStandardMaterial({ map: facadeTexture(), vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }),
+      plain: Object.assign(plaster, { vertexColors: true, side: THREE.DoubleSide }),
+      land: offset(land, 5),
+      tiled: Object.assign(clay, { vertexColors: true, side: THREE.DoubleSide }),
+      tank: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45 }),
       roofs: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide }),
       water: offset(new THREE.MeshStandardMaterial({ color: '#3f8ea0', roughness: 0.12, metalness: 0.15, envMapIntensity: 1.4, side: THREE.DoubleSide }), 4),
       post: new THREE.MeshStandardMaterial({ color: '#8d9095', roughness: 0.6, metalness: 0.4 }),
@@ -713,8 +1044,8 @@ export function MapTiles() {
         -4
       ),
     };
-  }, [asphalt, plaster, grass]);
-  const wetting = useMemo(() => [mats.asphalt, grass], [mats, grass]);
+  }, [asphalt, plaster, clay, grass, land]);
+  const wetting = useMemo(() => [mats.asphalt, grass, land], [mats, grass, land]);
   useFrame(() => {
     applyWetness(wetting, world.wet);
     mats.lampHead.emissiveIntensity = world.night * 4;
@@ -767,6 +1098,7 @@ export function MapTiles() {
   return (
     <group>
       <Ground mat={grass} />
+      <FarLand />
       <Bounds />
       {shown.map(({ tile, near, solid }) => (
         <group key={tile.key}>
