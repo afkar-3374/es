@@ -274,3 +274,5 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 13px; font-w
   .hud-menu-row, .hud-menu-item { padding: 7px 10px; font-size: 13px; }
   .menu-btn { min-width: 32px; }
 }
+.map-credit { margin: 4px 6px 0; font-size: 10.5px; font-weight: 600; color: #8a7d97; line-height: 1.4; }
+.map-credit a { color: inherit; }

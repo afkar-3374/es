@@ -5,3 +5,8 @@ People (Meera, Anu and the riders): Microsoft Rocketbox avatar library, MIT lice
 Font: Poppins, SIL Open Font License 1.1 (fonts/OFL.txt).
 Live weather: Open-Meteo (https://open-meteo.com), CC BY 4.0.
 Music: generated live in your browser (no recordings).
+Map: © OpenStreetMap contributors, ODbL (https://www.openstreetmap.org/copyright).
+Buildings: Google Open Buildings v3, CC BY 4.0 / ODbL (https://sites.research.google/open-buildings/).
+Land cover: ESA WorldCover 2021 v200, © ESA WorldCover project / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium, CC BY 4.0.
+Ground heights: AWS Terrain Tiles (Mapzen terrarium; SRTM and other sources, https://github.com/tilezen/joerd/blob/master/docs/attribution.md).
+Motion capture and the people's looks: Microsoft Rocketbox, MIT licence.

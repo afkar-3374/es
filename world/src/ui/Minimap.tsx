@@ -148,6 +148,10 @@ export function Minimap() {
                 Close
               </button>
             </div>
+            <p className="map-credit">
+              Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · buildings: Google Open Buildings · land cover: ESA WorldCover ·
+              heights: AWS Terrain Tiles · <a href="/CREDITS.txt">all credits</a>
+            </p>
           </div>
         </div>
       )}
