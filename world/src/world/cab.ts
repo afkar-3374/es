@@ -257,6 +257,26 @@ export async function wanderRoute(x: number, z: number, radius: number, min: num
   return { pts, cls, at, total: at[at.length - 1] };
 }
 
+/** The nearest junction on a proper road to (x, z), and which way that road runs from it. */
+export async function nearestRoad(x: number, z: number) {
+  const net = await loadNet();
+  let best = -1;
+  let bd = Infinity;
+  for (let i = 0; i < net.vx.length; i++) {
+    if (!net.out[i].some(([e]) => net.ec[e] <= 4)) continue;
+    const d = (net.vx[i] - x) ** 2 + (net.vz[i] - z) ** 2;
+    if (d < bd) {
+      bd = d;
+      best = i;
+    }
+  }
+  if (best < 0) return null;
+  const [e, fwd] = net.out[best].find(([e]) => net.ec[e] <= 4)!;
+  const p = edgePoints(net, e, fwd);
+  const L = Math.hypot(p[1][0] - p[0][0], p[1][1] - p[0][1]) || 1;
+  return { x: p[0][0], z: p[0][1], dx: (p[1][0] - p[0][0]) / L, dz: (p[1][1] - p[0][1]) / L };
+}
+
 /* ── The ride ─────────────────────────────────────────────────── */
 
 export type CabStatus = 'idle' | 'finding' | 'coming' | 'riding';

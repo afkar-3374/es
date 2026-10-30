@@ -5,7 +5,8 @@ import type { VehicleKind } from '../world/vehicleModels';
 
 /**
  * Phone controls: a joystick on the left to walk, drag anywhere on the right to look.
- * Riding, the joystick gives way to a steering wheel (car) or handlebar, and pedals.
+ * Riding, there are just two pedals (brake on the left, go on the right): drag to look,
+ * and the vehicle steers that way.
  */
 export function TouchControls() {
   const riding = useUiValue((s) => s.riding);
@@ -43,14 +44,9 @@ function useLook() {
 
 function DriveControls({ kind }: { kind: VehicleKind }) {
   const look = useLook();
-  const wheel = useRef<{ id: number; cx: number; cy: number; from: number; at: number } | null>(null);
-  const bar = useRef<{ id: number; x: number } | null>(null);
-  const [steer, setSteer] = useState(0);
   const [pedal, setPedal] = useState<'gas' | 'brake' | null>(null);
   const pedalTouch = useRef<number | null>(null);
-  const car = kind === 'car';
-  // how far the wheel turns (degrees) for full lock; a handlebar turns much less
-  const LOCK = car ? 150 : 38;
+  void kind;
 
   useEffect(
     () => () => {
@@ -59,27 +55,17 @@ function DriveControls({ kind }: { kind: VehicleKind }) {
     },
     []
   );
-  const setS = (v: number) => {
-    const c = Math.max(-1, Math.min(1, v));
-    input.joystick.x = c;
-    setSteer(c);
-  };
   const press = (p: 'gas' | 'brake' | null) => {
     input.joystick.y = p === 'gas' ? 1 : p === 'brake' ? -1 : 0;
     setPedal(p);
   };
 
+  // drag anywhere to look, and the vehicle turns that way; the pedals go and stop
   const onStart = (e: React.TouchEvent) => {
     for (const t of Array.from(e.changedTouches)) {
       const el = (t.target as HTMLElement).closest('[data-ctl]') as HTMLElement | null;
       const ctl = el?.dataset.ctl;
-      if (ctl === 'wheel' && !wheel.current && !bar.current) {
-        const r = el!.getBoundingClientRect();
-        const cx = r.left + r.width / 2;
-        const cy = r.top + r.height / 2;
-        if (car) wheel.current = { id: t.identifier, cx, cy, from: Math.atan2(t.clientY - cy, t.clientX - cx), at: steer * LOCK };
-        else bar.current = { id: t.identifier, x: t.clientX - steer * 70 };
-      } else if ((ctl === 'gas' || ctl === 'brake') && pedalTouch.current === null) {
+      if ((ctl === 'gas' || ctl === 'brake') && pedalTouch.current === null) {
         pedalTouch.current = t.identifier;
         press(ctl);
       } else if (!ctl) look.start(t);
@@ -87,18 +73,7 @@ function DriveControls({ kind }: { kind: VehicleKind }) {
   };
   const onMove = (e: React.TouchEvent) => {
     for (const t of Array.from(e.changedTouches)) {
-      const w = wheel.current;
-      if (w?.id === t.identifier) {
-        // turn the wheel by the angle your thumb has gone round its middle
-        const a = Math.atan2(t.clientY - w.cy, t.clientX - w.cx);
-        let d = ((a - w.from) * 180) / Math.PI;
-        d = ((d + 540) % 360) - 180;
-        w.from = a;
-        w.at = Math.max(-LOCK, Math.min(LOCK, w.at + d));
-        setS(w.at / LOCK);
-      } else if (bar.current?.id === t.identifier) {
-        setS((t.clientX - bar.current.x) / 70);
-      } else if (pedalTouch.current === t.identifier) {
+      if (pedalTouch.current === t.identifier) {
         // slide between the pedals
         const el = document.elementFromPoint(t.clientX, t.clientY)?.closest('[data-ctl]') as HTMLElement | null;
         const ctl = el?.dataset.ctl;
@@ -108,12 +83,7 @@ function DriveControls({ kind }: { kind: VehicleKind }) {
   };
   const onEnd = (e: React.TouchEvent) => {
     for (const t of Array.from(e.changedTouches)) {
-      if (wheel.current?.id === t.identifier || bar.current?.id === t.identifier) {
-        // let go: it straightens itself
-        wheel.current = null;
-        bar.current = null;
-        setS(0);
-      } else if (pedalTouch.current === t.identifier) {
+      if (pedalTouch.current === t.identifier) {
         pedalTouch.current = null;
         press(null);
       } else look.end(t);
@@ -122,58 +92,14 @@ function DriveControls({ kind }: { kind: VehicleKind }) {
 
   return (
     <div className="touch drive" onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd} onTouchCancel={onEnd}>
-      <div className={`steer ${car ? 'wheel' : 'bar'}${wheel.current || bar.current ? ' held' : ''}`} data-ctl="wheel" aria-label={car ? 'Steering wheel' : 'Handlebar'}>
-        <div className="steer-turn" style={{ transform: `rotate(${steer * LOCK}deg)` }}>
-          {car ? <SteeringWheel /> : <Handlebar />}
-        </div>
+      <p className="look-hint">Drag to steer</p>
+      <div className={`pedal brake${pedal === 'brake' ? ' on' : ''}`} data-ctl="brake" aria-label="Brake">
+        <span>BRAKE</span>
       </div>
-      <div className="pedals">
-        <div className={`pedal brake${pedal === 'brake' ? ' on' : ''}`} data-ctl="brake" aria-label="Brake">
-          <span>BRAKE</span>
-        </div>
-        <div className={`pedal gas${pedal === 'gas' ? ' on' : ''}`} data-ctl="gas" aria-label="Accelerator">
-          <span>GO</span>
-        </div>
+      <div className={`pedal gas${pedal === 'gas' ? ' on' : ''}`} data-ctl="gas" aria-label="Accelerator">
+        <span>GO</span>
       </div>
     </div>
-  );
-}
-
-function SteeringWheel() {
-  return (
-    <svg viewBox="0 0 120 120" aria-hidden="true">
-      <defs>
-        <radialGradient id="rim" cx="50%" cy="40%" r="60%">
-          <stop offset="0" stopColor="#4a4452" />
-          <stop offset="1" stopColor="#1d1922" />
-        </radialGradient>
-      </defs>
-      <circle cx="60" cy="60" r="52" fill="none" stroke="url(#rim)" strokeWidth="12" />
-      <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="2" />
-      {/* three spokes and the hub */}
-      <path d="M14 66 L46 62 M106 66 L74 62 M60 74 L60 106" stroke="#2c2733" strokeWidth="10" strokeLinecap="round" />
-      <circle cx="60" cy="62" r="17" fill="#2c2733" stroke="#4a4452" strokeWidth="2" />
-      <text x="60" y="67" textAnchor="middle" fontSize="13" fontWeight="800" fill="#f472b6" fontFamily="Nunito, sans-serif">
-        ES
-      </text>
-      {/* the top of the wheel, so you can see which way it's turned */}
-      <path d="M52 8.5 A52 52 0 0 1 68 8.5" stroke="#f97316" strokeWidth="12" fill="none" />
-    </svg>
-  );
-}
-
-function Handlebar() {
-  return (
-    <svg viewBox="0 0 160 70" aria-hidden="true">
-      {/* the bar, grips, levers and the middle with its little speedo */}
-      <path d="M14 34 Q80 22 146 34" stroke="#3a3540" strokeWidth="9" fill="none" strokeLinecap="round" />
-      <rect x="4" y="26" width="30" height="16" rx="7" fill="#1d1922" transform="rotate(-6 19 34)" />
-      <rect x="126" y="26" width="30" height="16" rx="7" fill="#1d1922" transform="rotate(6 141 34)" />
-      <path d="M34 40 L52 48 M126 40 L108 48" stroke="#8d9095" strokeWidth="4" strokeLinecap="round" />
-      <circle cx="80" cy="30" r="13" fill="#2c2733" stroke="#4a4452" strokeWidth="2" />
-      <path d="M72 33 A9 9 0 0 1 88 33" stroke="#f97316" strokeWidth="3" fill="none" strokeLinecap="round" />
-      <rect x="74" y="42" width="12" height="22" rx="4" fill="#3a3540" />
-    </svg>
   );
 }
 

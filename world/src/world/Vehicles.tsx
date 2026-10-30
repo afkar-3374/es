@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { CuboidCollider, RigidBody, useRapier, type RapierRigidBody } from '@react-three/rapier';
 import type { Collider, KinematicCharacterController } from '@dimforge/rapier3d-compat';
@@ -7,15 +7,17 @@ import { SPECS, setVehicleLights, VehicleModel, type VehicleKind } from './vehic
 import { ui, type Interactable } from './interact';
 import { insideBuilding, world } from './state';
 import { groundAt } from './map';
-import { me } from '../net/net';
+import { LOOKS, me } from '../net/net';
+import { SEX, showFrame, useClips, usePersonSource, walkCycle } from './people';
+import { seatOffset } from './Peers';
 import { isTouch } from '../player/input';
 import { input } from '../player/input';
 import { ride } from './ride';
 import { engine, horn } from '../audio/sfx';
 
 /*
- * The vehicle each visitor can call up and ride. There is no computer traffic:
- * everything on the roads belongs to a real visitor.
+ * The vehicle each visitor can call up and ride (the computer's traffic is in Traffic.tsx).
+ * Riding, you only go and brake: the vehicle steers towards wherever you look.
  */
 
 /** Colours for visitors' own vehicles */
@@ -86,8 +88,10 @@ function MyVehicle({ kind, color, home, yaw }: { kind: VehicleKind; color: strin
     speed: 0,
     fall: 0,
     riding: false,
-    look: 0,
-    pitch: -0.05,
+    /** the way you're looking (and steering towards), as a vehicle yaw */
+    aim: yaw,
+    steer: 0,
+    pitch: -0.12,
     lastRide: 0,
   });
   const wheels = useRef<{ o: THREE.Object3D; r: number }[]>([]);
@@ -131,11 +135,11 @@ function MyVehicle({ kind, color, home, yaw }: { kind: VehicleKind; color: strin
         if (u.drink) return ui.toast('Finish your drink before you ride!');
         const s = st.current;
         s.riding = true;
-        s.look = 0;
-        s.pitch = -0.05;
+        s.aim = s.yaw;
+        s.pitch = -0.12;
         ride.dismount = getOff;
-        ride.honk = () => horn(kind);
-        engine.start(kind);
+        ride.honk = () => horn(kind === 'bus' ? 'car' : kind);
+        engine.start(kind === 'bus' ? 'car' : kind);
         ui.ride({ id: kind, name: spec.name, emoji: spec.emoji });
         ui.toast(kind === 'car' ? 'Buckle up! Keep left, and mind the crossing.' : 'Helmet on! Keep left, and mind the crossing.');
       },
@@ -159,21 +163,31 @@ function MyVehicle({ kind, color, home, yaw }: { kind: VehicleKind; color: strin
 
     if (s.riding) {
       const busy = !!ui.get().card || !!ui.get().book;
+      // only go and brake: you steer by looking where you want to go (mouse, or dragging the
+      // screen); A/D or the arrow keys turn your view too
       const throttle = busy ? 0 : THREE.MathUtils.clamp(input.forward + input.joystick.y, -1, 1);
-      const steer = busy ? 0 : THREE.MathUtils.clamp(input.right + input.joystick.x, -1, 1);
-      // accelerate, brake, reverse slowly, roll to a stop
-      if (throttle > 0.05) s.speed += spec.accel * throttle * dt;
-      else if (throttle < -0.05) s.speed += (s.speed > 0.3 ? -7 : -spec.accel * 0.6) * -throttle * dt;
-      else s.speed -= Math.sign(s.speed) * Math.min(Math.abs(s.speed), 1.6 * dt);
-      s.speed = THREE.MathUtils.clamp(s.speed, -3, spec.top);
-      // steering gets gentler at speed, reverses when backing up
-      const grip = Math.min(Math.abs(s.speed) / 2.5, 1) * Math.sign(s.speed);
-      s.yaw -= steer * spec.turn * grip * dt * (1 - Math.min(Math.abs(s.speed) / (spec.top * 2.5), 0.5));
-      // look around while riding
-      s.look = THREE.MathUtils.clamp(s.look + input.lookYaw, -1.7, 1.7);
-      s.pitch = THREE.MathUtils.clamp(s.pitch + input.lookPitch, -0.9, 0.6);
+      if (!busy) {
+        s.aim += input.lookYaw - input.right * 1.6 * dt;
+        s.pitch = THREE.MathUtils.clamp(s.pitch + input.lookPitch, -0.7, 0.35);
+      }
       input.lookYaw = 0;
       input.lookPitch = 0;
+      // accelerate, brake, reverse slowly, roll to a stop
+      if (throttle > 0.05) s.speed += spec.accel * throttle * dt * (s.speed < 0 ? 3 : 1);
+      else if (throttle < -0.05) s.speed += (s.speed > 0.3 ? -8 : -spec.accel * 0.6) * -throttle * dt;
+      else s.speed -= Math.sign(s.speed) * Math.min(Math.abs(s.speed), 1.6 * dt);
+      s.speed = THREE.MathUtils.clamp(s.speed, -3.5, spec.top);
+      // the nose swings round towards where you look (more gently at speed); never past it
+      let off = s.aim - s.yaw;
+      off = Math.atan2(Math.sin(off), Math.cos(off));
+      const grip = Math.min(Math.abs(s.speed) / 2.5, 1);
+      const rate = spec.turn * grip * (1 - Math.min(Math.abs(s.speed) / (spec.top * 2.5), 0.45));
+      const turn = THREE.MathUtils.clamp(off * 2.2, -1, 1) * rate * dt;
+      s.yaw += Math.abs(turn) > Math.abs(off) ? off : turn;
+      // how far the front wheels / handlebar are turned (for the model)
+      s.steer = THREE.MathUtils.clamp(off * 1.5, -1, 1);
+      // keep your aim from winding up more than a half turn from the nose
+      s.aim = s.yaw + off;
       engine.speed(s.speed);
     }
 
@@ -211,13 +225,26 @@ function MyVehicle({ kind, color, home, yaw }: { kind: VehicleKind; color: strin
     world.vehicle = { kind, color, x: s.pos.x, y: s.pos.y, z: s.pos.z, yaw: s.yaw, speed: s.speed, ridden: s.riding };
 
     if (s.riding) {
-      eye.set(...spec.eye).applyQuaternion(q).add(s.pos);
-      // a little vibration on two- and three-wheelers
-      if (kind !== 'car') eye.y += Math.sin(performance.now() * 0.05) * 0.004 * Math.min(Math.abs(s.speed), 3);
-      camera.position.copy(eye);
-      camera.rotation.set(s.pitch, s.yaw - Math.PI / 2 + s.look, 0, 'YXZ');
+      const look = s.aim - Math.PI / 2;
+      if (ride.view === 'seat') {
+        eye.set(...spec.eye).applyQuaternion(q).add(s.pos);
+        // a little vibration on two- and three-wheelers
+        if (kind !== 'car') eye.y += Math.sin(performance.now() * 0.05) * 0.004 * Math.min(Math.abs(s.speed), 3);
+        camera.position.copy(eye);
+      } else {
+        // from behind, along the way you're looking, higher and further back at speed
+        const back = (kind === 'car' ? 6.2 : kind === 'auto' ? 5.4 : 4.4) + Math.min(Math.abs(s.speed), 20) * 0.08;
+        const high = (kind === 'car' ? 2.3 : 2.0) - s.pitch * 4;
+        const cx = s.pos.x - Math.cos(s.aim) * back;
+        const cz = s.pos.z + Math.sin(s.aim) * back;
+        const cy = Math.max(groundAt(cx, cz) + 0.8, s.pos.y + high);
+        const k = Math.min(1, dt * 8);
+        camera.position.set(THREE.MathUtils.lerp(camera.position.x, cx, k), THREE.MathUtils.lerp(camera.position.y, cy, k), THREE.MathUtils.lerp(camera.position.z, cz, k));
+        eye.set(s.pos.x, s.pos.y + 1.2, s.pos.z);
+      }
+      camera.rotation.set(ride.view === 'seat' ? s.pitch : s.pitch - 0.12, look, 0, 'YXZ');
       world.riding = { eye: eye.clone(), yaw: s.yaw - Math.PI / 2 };
-      world.heading = s.yaw - Math.PI / 2 + s.look;
+      world.heading = look;
       const speedo = document.getElementById('speedo');
       if (speedo) speedo.textContent = `${Math.round(Math.abs(s.speed) * 3.6)} km/h`;
     }
@@ -227,6 +254,11 @@ function MyVehicle({ kind, color, home, yaw }: { kind: VehicleKind; color: strin
     <>
       <group ref={group} position={home} rotation-y={yaw} userData={{ interact }}>
         <VehicleModel kind={kind} color={color} />
+        {kind !== 'car' && (
+          <Suspense fallback={null}>
+            <Rider kind={kind} shown={() => st.current.riding && ride.view === 'chase'} />
+          </Suspense>
+        )}
         {/* a hidden box so the whole vehicle is easy to tap (a bicycle is mostly air); rays still hit hidden meshes */}
         <mesh position={[0, spec.half[1], 0]} visible={false}>
           <boxGeometry args={[spec.half[0] * 2, spec.half[1] * 2, spec.half[2] * 2 + 0.2]} />
@@ -237,4 +269,22 @@ function MyVehicle({ kind, color, home, yaw }: { kind: VehicleKind; color: strin
       </RigidBody>
     </>
   );
+}
+
+/** Someone on a two- or three-wheeler (you, seen from behind; or traffic). */
+export function Rider({ kind, shown, look = me.look }: { kind: VehicleKind; shown: () => boolean; look?: number }) {
+  const lookName = LOOKS[look] ?? LOOKS[0];
+  const source = usePersonSource(lookName);
+  const sex = SEX[lookName] ?? 'f';
+  const clips = useClips([`${sex}_walk`, `${sex}_run`, `${sex}_idle`] as const);
+  const cycle = useMemo(() => walkCycle(source, { walk: clips[`${sex}_walk`], run: clips[`${sex}_run`], idle: clips[`${sex}_idle`] }), [source, clips, sex]);
+  const model = useMemo(() => {
+    const m = cycle.frames[0].clone();
+    m.traverse((o) => (o.castShadow = true));
+    showFrame(m, kind === 'bike' ? cycle.bike : cycle.sit);
+    return m;
+  }, [cycle, kind]);
+  const [ox, oy] = seatOffset(kind);
+  useFrame(() => void (model.visible = shown()));
+  return <primitive object={model} position={[ox, oy, 0]} rotation-y={Math.PI / 2} />;
 }

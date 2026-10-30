@@ -1,3 +1,4 @@
+import { SPECS } from '../world/vehicleModels';
 import { useEffect, useRef, useState } from 'react';
 import { BUILDING, world } from '../world/state';
 import { getMeta, loadedTile, loadMeta, RAIL, waterRects, type Tile } from '../world/map';
@@ -389,7 +390,7 @@ function draw(canvas: HTMLCanvasElement, view: { cx: number; cz: number; scale: 
     g.fillStyle = '#2b2238';
     g.font = `${full ? 24 : 22}px sans-serif`;
     g.textAlign = 'center';
-    g.fillText({ bike: '🏍️', auto: '🛺', car: '🚗', cycle: '🚲' }[v.kind], X(v.x), Z(v.z) + 8);
+    g.fillText(SPECS[v.kind].emoji, X(v.x), Z(v.z) + 8);
   }
 
   // you: an arrow pointing where you look

@@ -8,4 +8,9 @@ export const ride = {
   call: (_kind: VehicleKind) => {},
   dismount: () => {},
   honk: () => {},
+  /** riding: from behind the vehicle ('chase') or from the seat ('seat') */
+  view: 'chase' as 'chase' | 'seat',
+  toggleView: () => {
+    ride.view = ride.view === 'chase' ? 'seat' : 'chase';
+  },
 };

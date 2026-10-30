@@ -107,7 +107,7 @@ export function Peers() {
 }
 
 /** Where a rider sits on each vehicle (as in the traffic). */
-function seatOffset(kind: VehicleKind): [number, number] {
+export function seatOffset(kind: VehicleKind): [number, number] {
   const x = kind === 'auto' ? 0.25 : kind === 'cycle' ? -0.28 : kind === 'car' ? -0.05 : -0.22;
   return [x, SPECS[kind].seat - 0.92];
 }

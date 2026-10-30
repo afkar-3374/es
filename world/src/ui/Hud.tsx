@@ -11,7 +11,57 @@ import { goFullscreen } from './Landscape';
 import { quality, useQuality } from '../world/quality';
 import { useVoice, voice } from '../net/voice';
 import { bookCab } from './Cab';
-import { useCab } from '../world/cab';
+import { cab, nearestRoad, useCab } from '../world/cab';
+import { getMeta, groundAt } from '../world/map';
+import { world } from '../world/state';
+import * as THREE from 'three';
+
+/** The name of the place you're in (the nearest town, village or suburb), as you go. */
+function usePlace() {
+  const [name, setName] = useState('Kasaragod');
+  useEffect(() => {
+    const tick = () => {
+      const m = getMeta();
+      if (!m) return;
+      const p = world.player;
+      let best = 'Kasaragod';
+      let bd = Infinity;
+      for (const q of m.places) {
+        // towns reach further than hamlets
+        const reach = q.k === 'town' ? 1 : q.k === 'suburb' || q.k === 'village' ? 1.6 : 2.4;
+        const d = Math.hypot(q.x - p.x, q.z - p.z) * reach;
+        if (d < bd) {
+          bd = d;
+          best = q.n;
+        }
+      }
+      // near the building: Mogral
+      if (Math.hypot(p.x, p.z) < 400) best = 'Mogral';
+      setName(bd < 4000 || best === 'Mogral' ? best : 'Kasaragod');
+    };
+    tick();
+    const t = setInterval(tick, 2000);
+    return () => clearInterval(t);
+  }, []);
+  return name;
+}
+
+/** Go straight to a place (by the nearest road there). */
+export function jumpTo(n: string) {
+  const d = cab.destinations().find((x) => x.n === n);
+  if (!d || ui.get().riding) return ui.toast(ui.get().riding ? 'Get off first, then jump.' : 'Unknown place');
+  if (d.home) {
+    world.dismountAt = new THREE.Vector3((Math.random() - 0.5) * 6, 0.2, 16.5);
+    return ui.toast('⚡ Back at Electrosparkzz, Mogral');
+  }
+  nearestRoad(d.x, d.z).then((r) => {
+    if (!r) return;
+    const x = r.x + r.dz * 4;
+    const z = r.z - r.dx * 4;
+    world.dismountAt = new THREE.Vector3(x, groundAt(x, z) + 0.5, z);
+    ui.toast(`${d.e} ${d.n}`);
+  });
+}
 
 /** Pick a vehicle; it turns up right in front of you. */
 export function chooseVehicle() {
@@ -48,18 +98,19 @@ export function Hud({ c }: { c: Conditions }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (typing(e) || ui.get().card || ui.get().book) return;
-      if (e.code === 'KeyV') chooseVehicle();
+      if (e.code === 'KeyV' && !ui.get().riding) chooseVehicle();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   const here = roster.length + 1;
+  const place = usePlace();
   return (
     <div className="hud">
       <div className="hud-left">
         <div className="pill" title={w.live ? 'Live weather in Kasaragod (Open-Meteo)' : 'Live weather unavailable: typical weather for the season'}>
-          <span>📍 Kasaragod</span>
+          <span>📍 {place}</span>
           <b>{c.clock}</b>
           <span>
             {w.emoji} {w.temperature}° · {w.label}
@@ -126,19 +177,40 @@ export function Hud({ c }: { c: Conditions }) {
               <span>⛶ Full screen</span>
               <b>{document.fullscreenElement ? 'On' : 'Off'}</b>
             </button>
+            <p className="hud-menu-title">Go to</p>
+            <div className="hud-menu-row">
+              <span>📍 Place</span>
+              <select
+                className="jump"
+                value=""
+                aria-label="Go to a place"
+                onChange={(e) => {
+                  if (e.target.value) jumpTo(e.target.value);
+                  setMenu(false);
+                }}
+              >
+                <option value="">Choose…</option>
+                {cab.destinations().map((d) => (
+                  <option key={d.n} value={d.n}>
+                    {d.e} {d.n}
+                  </option>
+                ))}
+              </select>
+            </div>
             <p className="hud-menu-title">How to play</p>
             <ul className="hud-menu-keys">
               {isTouch ? (
                 <>
                   <li>🕹️ Left thumb walks · drag the right side to look</li>
                   <li>👆 Tap people and things to use them</li>
-                  <li>🚗 Riding: steering wheel or handlebar, and pedals</li>
+                  <li>🚗 Riding: drag to steer where you look · GO & BRAKE pedals</li>
                 </>
               ) : (
                 <>
                   <li>⌨️ W A S D walk · mouse looks · Shift runs</li>
                   <li>🖱️ Click things to use them · Esc frees the mouse</li>
-                  <li>🚕 C cab · V vehicle · M map · Enter chat · H horn</li>
+                  <li>🚗 Riding: look to steer · W go · S brake · V view · H horn</li>
+                  <li>🚕 C cab · V vehicle · M map · Enter chat</li>
                 </>
               )}
             </ul>

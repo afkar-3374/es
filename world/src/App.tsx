@@ -16,6 +16,8 @@ import { Landmarks } from './world/Landmarks';
 import { Cab } from './world/Cab';
 import { CabUi } from './ui/Cab';
 import { groundAt, inGap, useMeta } from './world/map';
+import { cab, nearestRoad } from './world/cab';
+import { ui } from './world/interact';
 import { Peers } from './world/Peers';
 import { Chat } from './ui/Chat';
 import { Minimap } from './ui/Minimap';
@@ -108,6 +110,16 @@ export default function App() {
 
   const enter = useCallback((profile: Profile) => {
     setEntered(true);
+    // start where you said you are: on the nearest road, at its side
+    const there = cab.destinations().find((d) => d.n === profile.start);
+    if (there)
+      nearestRoad(there.x, there.z).then((r) => {
+        if (!r) return;
+        const x = r.x + r.dz * 4;
+        const z = r.z - r.dx * 4;
+        world.dismountAt = new THREE.Vector3(x, groundAt(x, z) + 0.5, z);
+        ui.toast(`${there.e} Welcome to ${there.n}!`);
+      });
     net.start(profile);
     voice.start();
     goFullscreen();

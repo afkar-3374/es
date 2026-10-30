@@ -8,7 +8,8 @@ import { canvasTexture } from './materials';
  * Vehicles at real size. Every model faces +x (forward), y is up, +z is its right-hand
  * side. Wheels are tagged `userData.wheel = radius` so they can be spun.
  */
-export type VehicleKind = 'car' | 'auto' | 'bike' | 'cycle';
+/** (bus: traffic only) */
+export type VehicleKind = 'car' | 'auto' | 'bike' | 'cycle' | 'bus';
 
 export const SPECS: Record<VehicleKind, {
   name: string;
@@ -27,6 +28,7 @@ export const SPECS: Record<VehicleKind, {
   car: { name: 'Car', emoji: '🚗', half: [1.95, 0.75, 0.86], eye: [-0.05, 1.18, 0.36], top: 16, accel: 3.2, turn: 0.75, seat: 0.5 },
   auto: { name: 'Auto rickshaw', emoji: '🛺', half: [1.33, 0.88, 0.66], eye: [0.15, 1.42, 0], top: 12, accel: 2.4, turn: 1.0, seat: 0.82 },
   bike: { name: 'Superbike', emoji: '🏍️', half: [1.02, 0.58, 0.36], eye: [-0.12, 1.38, 0], top: 62, accel: 8.5, turn: 1.35, seat: 0.84 },
+  bus: { name: 'Bus', emoji: '🚌', half: [5.45, 1.55, 1.25], eye: [4.6, 2.4, 0.7], top: 14, accel: 1.4, turn: 0.4, seat: 1.4 },
   cycle: { name: 'Bicycle', emoji: '🚲', half: [0.88, 0.55, 0.3], eye: [-0.25, 1.6, 0], top: 6, accel: 1.4, turn: 1.6, seat: 0.95 },
 };
 
@@ -61,6 +63,9 @@ const mats = {
   seat: new THREE.MeshStandardMaterial({ color: '#2a2422', roughness: 0.8 }),
   head: new THREE.MeshStandardMaterial({ color: '#fff7e0', emissive: '#fff1c9', emissiveIntensity: 0.2 }),
   tail: new THREE.MeshStandardMaterial({ color: '#c1121f', emissive: '#ff2a2a', emissiveIntensity: 0.25 }),
+  /** tinted glass, solid (no see-through sorting troubles), glossy */
+  tint: new THREE.MeshPhysicalMaterial({ color: '#16212a', roughness: 0.05, metalness: 0.3, clearcoat: 1, envMapIntensity: 1.8 }),
+  trim: new THREE.MeshStandardMaterial({ color: '#2b2d31', roughness: 0.7 }),
 };
 
 /** Make headlights and tail lights glow (0 = day … 1 = night). */
@@ -69,63 +74,159 @@ export function setVehicleLights(night: number) {
   mats.tail.emissiveIntensity = 0.25 + night * 1.6;
 }
 
-function Wheel({ r, w, position, rim = 0.6 }: { r: number; w: number; position: [number, number, number]; rim?: number }) {
+/* ── Car: a hatchback, its body drawn from a real side profile ───── */
+
+/** An outline in the side view (x forward, y up) pushed out `depth` across, centred, softly rounded. */
+function extrudeSide(points: (s: THREE.Shape) => void, depth: number, bevel: number) {
+  const shape = new THREE.Shape();
+  points(shape);
+  const g = new THREE.ExtrudeGeometry(shape, { depth: depth - bevel * 2, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 4, curveSegments: 14 });
+  g.translate(0, 0, -(depth - bevel * 2) / 2);
+  g.computeVertexNormals();
+  return g;
+}
+
+const CAR_BODY = extrudeSide((s) => {
+  s.moveTo(-1.93, 0.34);
+  s.lineTo(-1.64, 0.34);
+  // the wheel arches
+  s.absarc(-1.25, 0.31, 0.39, Math.PI, 0, true);
+  s.lineTo(0.86, 0.34);
+  s.absarc(1.25, 0.31, 0.39, Math.PI, 0, true);
+  s.lineTo(1.9, 0.34);
+  // bumper, nose, the bonnet sloping up to the windscreen
+  s.quadraticCurveTo(1.99, 0.36, 1.98, 0.56);
+  s.quadraticCurveTo(1.97, 0.76, 1.84, 0.8);
+  s.quadraticCurveTo(1.35, 0.88, 0.82, 0.98);
+  // the shoulder line to the back, and the tailgate
+  s.lineTo(-1.72, 1.04);
+  s.quadraticCurveTo(-1.95, 1.0, -1.97, 0.78);
+  s.lineTo(-1.95, 0.42);
+  s.quadraticCurveTo(-1.95, 0.34, -1.93, 0.34);
+}, 1.66, 0.07);
+
+const CAR_GLASS = extrudeSide((s) => {
+  s.moveTo(0.84, 0.96);
+  // windscreen, roof, the hatch's glass
+  s.quadraticCurveTo(0.45, 1.25, 0.12, 1.43);
+  s.quadraticCurveTo(-0.6, 1.5, -1.3, 1.45);
+  s.quadraticCurveTo(-1.62, 1.3, -1.74, 1.02);
+  s.lineTo(0.84, 0.96);
+}, 1.46, 0.04);
+
+const CAR_ROOF = extrudeSide((s) => {
+  s.moveTo(0.1, 1.43);
+  s.quadraticCurveTo(-0.6, 1.5, -1.32, 1.45);
+  s.lineTo(-1.3, 1.52);
+  s.quadraticCurveTo(-0.6, 1.57, 0.08, 1.5);
+  s.lineTo(0.1, 1.43);
+}, 1.44, 0.05);
+
+/** A wheel: tyre with a rounded shoulder, five-spoke alloy, hub. */
+function Wheel({ r, w, position, rim = 0.62, spokes = 5 }: { r: number; w: number; position: [number, number, number]; rim?: number; spokes?: number }) {
   return (
     <group position={position} userData={{ wheel: r }}>
-      <mesh rotation-x={Math.PI / 2} material={mats.tyre}>
-        <cylinderGeometry args={[r, r, w, 22]} />
+      <mesh rotation-x={Math.PI / 2} material={mats.tyre} castShadow>
+        <cylinderGeometry args={[r * 0.96, r * 0.96, w, 24]} />
       </mesh>
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[0, 0, (s * w) / 2 + s * 0.002]} rotation-x={Math.PI / 2} material={mats.rim}>
-          <cylinderGeometry args={[r * rim, r * rim, 0.004, 18]} />
+        <mesh key={`t${s}`} position={[0, 0, (s * w) / 2]} material={mats.tyre}>
+          <torusGeometry args={[r * 0.84, r * 0.13, 8, 24]} />
         </mesh>
+      ))}
+      {[-1, 1].map((s) => (
+        <group key={s} position={[0, 0, s * (w / 2 - 0.01)]}>
+          <mesh rotation-x={Math.PI / 2} material={mats.black}>
+            <cylinderGeometry args={[r * rim, r * rim, 0.02, 20]} />
+          </mesh>
+          {Array.from({ length: spokes }, (_, i) => (
+            <mesh key={i} position={[0, 0, s * 0.012]} rotation-z={(i / spokes) * Math.PI * 2} material={mats.rim}>
+              <boxGeometry args={[r * rim * 1.9, r * 0.13, 0.02]} />
+            </mesh>
+          ))}
+          <mesh position={[0, 0, s * 0.02]} rotation-x={Math.PI / 2} material={mats.rim}>
+            <cylinderGeometry args={[r * rim, r * rim, 0.006, 20, 1, true]} />
+          </mesh>
+          <mesh position={[0, 0, s * 0.022]} rotation-x={Math.PI / 2} material={mats.chrome}>
+            <cylinderGeometry args={[r * 0.14, r * 0.16, 0.03, 12]} />
+          </mesh>
+        </group>
       ))}
     </group>
   );
 }
 
-/* ── Car: a small hatchback ─────────────────────────────────────── */
-
 export const Car = forwardRef<THREE.Group, { color: string; plateText?: string }>(function Car({ color, plateText = 'KL 14 A 2026' }, ref) {
-  const paint = useMemo(() => new THREE.MeshStandardMaterial({ color, roughness: 0.25, metalness: 0.55, envMapIntensity: 1.3 }), [color]);
+  const paint = useMemo(() => new THREE.MeshPhysicalMaterial({ color, roughness: 0.28, metalness: 0.45, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 1.4 }), [color]);
   const plateMat = useMemo(() => new THREE.MeshStandardMaterial({ map: plate(plateText), roughness: 0.4 }), [plateText]);
   return (
     <group ref={ref}>
-      {/* lower body and bonnet */}
-      <RoundedBox args={[3.85, 0.62, 1.7]} radius={0.16} smoothness={4} position={[0, 0.62, 0]} castShadow receiveShadow material={paint} />
-      {/* cabin: pillars, roof and glass */}
-      <RoundedBox args={[2.05, 0.08, 1.48]} radius={0.04} smoothness={2} position={[-0.3, 1.45, 0]} castShadow material={paint} />
-      <mesh position={[-0.28, 1.17, 0]} material={mats.glass}>
-        <boxGeometry args={[2.02, 0.5, 1.5]} />
-      </mesh>
-      {/* windscreen and rear glass, raked */}
-      <mesh position={[0.86, 1.17, 0]} rotation-z={-0.62} material={mats.glass}>
-        <boxGeometry args={[0.04, 0.62, 1.44]} />
-      </mesh>
-      {/* pillars */}
+      <mesh geometry={CAR_BODY} material={paint} castShadow receiveShadow />
+      <mesh geometry={CAR_GLASS} material={mats.tint} castShadow />
+      <mesh geometry={CAR_ROOF} material={paint} castShadow />
       {[-1, 1].map((s) => (
         <group key={s}>
-          <mesh position={[0.82, 1.17, s * 0.73]} rotation-z={-0.62} material={paint}>
-            <boxGeometry args={[0.06, 0.62, 0.05]} />
+          {/* the middle pillar between the doors' windows */}
+          <mesh position={[-0.42, 1.21, s * 0.73]} material={mats.black}>
+            <boxGeometry args={[0.09, 0.5, 0.02]} />
           </mesh>
-          <mesh position={[-1.27, 1.17, s * 0.73]} rotation-z={0.35} material={paint}>
-            <boxGeometry args={[0.1, 0.58, 0.05]} />
-          </mesh>
-          <mesh position={[-0.25, 1.17, s * 0.745]} material={paint}>
-            <boxGeometry args={[0.06, 0.52, 0.02]} />
+          {/* door seams, handles, the black trim along the sill */}
+          {[0.78, -0.4, -1.45].map((x) => (
+            <mesh key={x} position={[x, 0.68, s * 0.835]} material={mats.black}>
+              <boxGeometry args={[0.012, 0.6, 0.01]} />
+            </mesh>
+          ))}
+          {[0.05, -1.05].map((x) => (
+            <mesh key={`h${x}`} position={[x, 0.86, s * 0.84]} material={mats.chrome}>
+              <boxGeometry args={[0.16, 0.035, 0.02]} />
+            </mesh>
+          ))}
+          <mesh position={[0, 0.39, s * 0.82]} material={mats.black}>
+            <boxGeometry args={[1.6, 0.08, 0.04]} />
           </mesh>
           {/* mirrors */}
-          <mesh position={[0.62, 1.0, s * 0.92]} material={paint}>
-            <boxGeometry args={[0.1, 0.1, 0.16]} />
+          <mesh position={[0.66, 1.03, s * 0.93]} material={paint}>
+            <boxGeometry args={[0.16, 0.12, 0.2]} />
+          </mesh>
+          <mesh position={[0.6, 1.03, s * 0.93]} material={mats.chrome}>
+            <boxGeometry args={[0.02, 0.09, 0.16]} />
+          </mesh>
+          {/* headlamps swept back into the wings, tail lamps wrapping round */}
+          <mesh position={[1.88, 0.73, s * 0.6]} rotation-y={s * -0.25} material={mats.head}>
+            <boxGeometry args={[0.12, 0.12, 0.36]} />
+          </mesh>
+          <mesh position={[1.92, 0.44, s * 0.62]} material={mats.head}>
+            <cylinderGeometry args={[0.045, 0.045, 0.03, 12]} />
+          </mesh>
+          <mesh position={[-1.93, 0.86, s * 0.66]} material={mats.tail}>
+            <boxGeometry args={[0.08, 0.18, 0.26]} />
           </mesh>
         </group>
       ))}
-      {/* inside: dashboard and steering wheel on the right (Indian cars are right-hand drive) */}
-      <mesh position={[0.66, 0.9, 0]} material={mats.black}>
-        <boxGeometry args={[0.36, 0.1, 1.5]} />
+      {/* grille, bumpers, plates */}
+      <mesh position={[1.95, 0.62, 0]} material={mats.black}>
+        <boxGeometry args={[0.04, 0.13, 0.86]} />
       </mesh>
-      {/* steering wheel, facing the driver and tilted like a real one */}
-      <group position={[0.4, 0.93, 0.36]} rotation-z={0.45}>
+      <mesh position={[1.955, 0.645, 0]} material={mats.chrome}>
+        <boxGeometry args={[0.03, 0.02, 0.8]} />
+      </mesh>
+      <mesh position={[1.96, 0.37, 0]} material={mats.trim}>
+        <boxGeometry args={[0.06, 0.1, 1.6]} />
+      </mesh>
+      <mesh position={[-1.96, 0.42, 0]} material={mats.trim}>
+        <boxGeometry args={[0.06, 0.14, 1.6]} />
+      </mesh>
+      <mesh position={[1.995, 0.5, 0]} rotation-y={Math.PI / 2} material={plateMat}>
+        <planeGeometry args={[0.52, 0.12]} />
+      </mesh>
+      <mesh position={[-1.985, 0.6, 0]} rotation-y={-Math.PI / 2} material={plateMat}>
+        <planeGeometry args={[0.52, 0.12]} />
+      </mesh>
+      {/* inside: dashboard and steering wheel on the right (Indian cars are right-hand drive) */}
+      <mesh position={[0.62, 0.92, 0]} material={mats.black}>
+        <boxGeometry args={[0.36, 0.12, 1.42]} />
+      </mesh>
+      <group position={[0.4, 0.95, 0.36]} rotation-z={0.45}>
         <mesh rotation-y={Math.PI / 2} material={mats.black}>
           <torusGeometry args={[0.17, 0.018, 8, 28]} />
         </mesh>
@@ -133,33 +234,89 @@ export const Car = forwardRef<THREE.Group, { color: string; plateText?: string }
           <cylinderGeometry args={[0.035, 0.035, 0.06, 12]} />
         </mesh>
       </group>
-      <mesh position={[-0.05, 0.75, 0.36]} material={mats.seat}>
-        <boxGeometry args={[0.5, 0.15, 0.5]} />
-      </mesh>
-      <mesh position={[-0.05, 0.75, -0.36]} material={mats.seat}>
-        <boxGeometry args={[0.5, 0.15, 0.5]} />
-      </mesh>
-      {/* lights, grille, bumpers, plates */}
-      {[-1, 1].map((s) => (
-        <group key={s}>
-          <mesh position={[1.92, 0.78, s * 0.58]} material={mats.head}>
-            <boxGeometry args={[0.04, 0.13, 0.32]} />
+      {[-0.36, 0.36].map((z) => (
+        <group key={z}>
+          <mesh position={[-0.05, 0.62, z]} material={mats.seat}>
+            <boxGeometry args={[0.5, 0.15, 0.5]} />
           </mesh>
-          <mesh position={[-1.92, 0.82, s * 0.62]} material={mats.tail}>
-            <boxGeometry args={[0.04, 0.18, 0.22]} />
+          <mesh position={[-0.3, 0.95, z]} rotation-z={0.15} material={mats.seat}>
+            <boxGeometry args={[0.12, 0.6, 0.48]} />
           </mesh>
         </group>
       ))}
-      <mesh position={[1.93, 0.6, 0]} material={mats.black}>
-        <boxGeometry args={[0.03, 0.14, 0.8]} />
+      {[1.25, -1.25].flatMap((x) => [-0.71, 0.71].map((z) => <Wheel key={`${x}${z}`} r={0.31} w={0.2} position={[x, 0.31, z]} />))}
+    </group>
+  );
+});
+
+/* ── KSRTC bus (traffic): red and yellow, KASARAGOD on the board ─── */
+
+function busSide() {
+  return canvasTexture(1024, 256, (g) => {
+    g.fillStyle = '#b3171d';
+    g.fillRect(0, 0, 1024, 256);
+    // window band
+    g.fillStyle = '#f1e2b8';
+    g.fillRect(0, 34, 1024, 92);
+    g.fillStyle = '#1b2228';
+    for (let x = 18; x < 1000; x += 92) g.fillRect(x, 42, 80, 76);
+    g.fillStyle = '#f2c200';
+    g.fillRect(0, 132, 1024, 14);
+    g.fillRect(0, 222, 1024, 8);
+    g.fillStyle = '#fff6dc';
+    g.font = '900 54px Arial, sans-serif';
+    g.textAlign = 'center';
+    g.fillText('KERALA RTC', 512, 200);
+  });
+}
+function busBoard() {
+  return canvasTexture(512, 96, (g) => {
+    g.fillStyle = '#111';
+    g.fillRect(0, 0, 512, 96);
+    g.fillStyle = '#ffb000';
+    g.font = '900 54px Arial, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('KASARAGOD', 256, 50);
+  });
+}
+
+export const Bus = forwardRef<THREE.Group, object>(function Bus(_, ref) {
+  const side = useMemo(() => new THREE.MeshStandardMaterial({ map: busSide(), roughness: 0.45, metalness: 0.2 }), []);
+  const red = useMemo(() => new THREE.MeshStandardMaterial({ color: '#b3171d', roughness: 0.4, metalness: 0.2 }), []);
+  const board = useMemo(() => new THREE.MeshStandardMaterial({ map: busBoard(), emissive: '#ffb000', emissiveIntensity: 0.2, emissiveMap: busBoard() }), []);
+  return (
+    <group ref={ref}>
+      <RoundedBox args={[10.8, 2.7, 2.48]} radius={0.18} smoothness={3} position={[0, 1.85, 0]} castShadow receiveShadow material={red} />
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[0, 1.85, s * 1.245]} rotation-y={s === 1 ? 0 : Math.PI} material={side}>
+          <planeGeometry args={[10.4, 2.6]} />
+        </mesh>
+      ))}
+      {/* windscreen, destination board, lights, bumper */}
+      <mesh position={[5.405, 2.2, 0]} rotation-y={Math.PI / 2} material={mats.tint}>
+        <planeGeometry args={[2.3, 1.3]} />
       </mesh>
-      <mesh position={[1.945, 0.42, 0]} rotation-y={Math.PI / 2} material={plateMat}>
-        <planeGeometry args={[0.52, 0.12]} />
+      <mesh position={[5.41, 3.0, 0]} rotation-y={Math.PI / 2} material={board}>
+        <planeGeometry args={[1.8, 0.32]} />
       </mesh>
-      <mesh position={[-1.945, 0.55, 0]} rotation-y={-Math.PI / 2} material={plateMat}>
-        <planeGeometry args={[0.52, 0.12]} />
+      <mesh position={[-5.405, 2.3, 0]} rotation-y={-Math.PI / 2} material={mats.tint}>
+        <planeGeometry args={[2.1, 0.9]} />
       </mesh>
-      {[1.25, -1.25].flatMap((x) => [-0.72, 0.72].map((z) => <Wheel key={`${x}${z}`} r={0.3} w={0.2} position={[x, 0.3, z]} />))}
+      {[-1, 1].map((s) => (
+        <group key={s}>
+          <mesh position={[5.41, 0.95, s * 0.95]} material={mats.head}>
+            <boxGeometry args={[0.04, 0.2, 0.3]} />
+          </mesh>
+          <mesh position={[-5.41, 1.0, s * 1.0]} material={mats.tail}>
+            <boxGeometry args={[0.04, 0.3, 0.2]} />
+          </mesh>
+        </group>
+      ))}
+      <mesh position={[5.42, 0.65, 0]} material={mats.trim}>
+        <boxGeometry args={[0.1, 0.25, 2.4]} />
+      </mesh>
+      {[3.6, -3.0].flatMap((x) => [-1.08, 1.08].map((z) => <Wheel key={`${x}${z}`} r={0.5} w={0.3} rim={0.55} spokes={8} position={[x, 0.5, z]} />))}
     </group>
   );
 });
@@ -387,7 +544,7 @@ export function VehicleModel({ kind, color }: { kind: VehicleKind; color: string
   useLayoutEffect(() => (ref.current ? mergeStatic(ref.current) : undefined), [kind, color]);
   return (
     <group ref={ref}>
-      {kind === 'car' ? <Car color={color} /> : kind === 'auto' ? <Auto /> : kind === 'bike' ? <Superbike color={color} /> : <Cycle color={color} />}
+      {kind === 'car' ? <Car color={color} /> : kind === 'bus' ? <Bus /> : kind === 'auto' ? <Auto /> : kind === 'bike' ? <Superbike color={color} /> : <Cycle color={color} />}
     </group>
   );
 }

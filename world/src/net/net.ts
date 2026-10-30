@@ -56,6 +56,8 @@ export interface ChatLine {
 export interface Profile {
   name: string;
   look: number;
+  /** where in Kasaragod you start (a cab destination's name; none: the Electrosparkzz building) */
+  start?: string;
 }
 
 const PROFILE_KEY = 'es-world-profile';
@@ -92,7 +94,7 @@ const emit = () => {
 export function loadProfile(): Profile {
   try {
     const saved = JSON.parse(localStorage.getItem(PROFILE_KEY) ?? 'null');
-    if (saved && typeof saved.name === 'string') return { name: cleanName(saved.name) || randomName(), look: cleanLook(saved.look) };
+    if (saved && typeof saved.name === 'string') return { name: cleanName(saved.name) || randomName(), look: cleanLook(saved.look), start: typeof saved.start === 'string' ? saved.start : undefined };
   } catch {
     /* private window */
   }
@@ -244,7 +246,7 @@ export const net = {
   start(profile: Profile) {
     me.name = cleanName(profile.name) || randomName();
     me.look = cleanLook(profile.look);
-    saveProfile({ name: me.name, look: me.look });
+    saveProfile({ name: me.name, look: me.look, start: profile.start });
     if (client) return;
     status = 'connecting';
     emit();

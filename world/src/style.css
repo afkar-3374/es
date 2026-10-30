@@ -74,6 +74,8 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 13px; font-w
 .name-field { display: grid; gap: 6px; margin: 0 0 10px; text-align: left; font-size: 13px; font-weight: 800; color: #6f6380; }
 .name-field input { width: 100%; padding: 12px 16px; border: 0; border-radius: 14px; background: #fff; box-shadow: inset 0 0 0 2px #f4e6ee; font: 700 16px "Nunito", sans-serif; color: #2b2238; -webkit-user-select: text; user-select: text; }
 .name-field input:focus { outline: none; box-shadow: inset 0 0 0 2px #ec4899; }
+.name-field select { width: 100%; padding: 11px 40px 11px 14px; border: 0; border-radius: 14px; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23be185d' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 14px center; box-shadow: inset 0 0 0 2px #f4e6ee; font: 700 15px "Nunito", sans-serif; color: #2b2238; appearance: none; -webkit-appearance: none; cursor: pointer; }
+.name-field select:focus { outline: none; box-shadow: inset 0 0 0 2px #ec4899; }
 .looks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0 0 12px; }
 .looks button { padding: 9px 6px; border: 0; border-radius: 12px; background: #fff; box-shadow: inset 0 0 0 2px #f4e6ee; font: 800 13px "Nunito", sans-serif; color: #554a63; cursor: pointer; }
 .looks button.on { box-shadow: inset 0 0 0 2px #ec4899; background: #fff0f7; color: #be185d; }
@@ -148,6 +150,8 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 13px; font-w
   .lead { font-size: 13px; margin: 0; }
   .name-field { margin-bottom: 8px; }
   .name-field input { padding: 9px 14px; font-size: 15px; }
+  .name-field select { padding: 8px 36px 8px 12px; font-size: 14px; }
+  .keys { display: none; }
   .looks { margin-bottom: 8px; }
   .looks button { padding: 7px 4px; font-size: 12px; }
   .keys { padding: 7px 12px; margin-bottom: 8px; font-size: 11.5px; gap: 2px; }
@@ -230,31 +234,23 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 13px; font-w
   .cab-actions button { padding: 6px 10px; font-size: 12px; }
 }
 
-/* Driving on a phone: a steering wheel or handlebar on the left, pedals on the right */
-.drive .steer { position: absolute; left: max(18px, env(safe-area-inset-left)); bottom: max(14px, env(safe-area-inset-bottom)); display: grid; place-items: center; touch-action: none; }
-.drive .steer.wheel { width: 150px; height: 150px; }
-.drive .steer.bar { width: 190px; height: 110px; border-radius: 28px; background: rgba(255, 255, 255, 0.12); }
-.steer-turn { width: 100%; height: 100%; display: grid; place-items: center; transition: transform 0.25s cubic-bezier(0.3, 1.4, 0.5, 1); pointer-events: none; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.35)); }
-.steer.held .steer-turn { transition: none; }
-.steer-turn svg { width: 100%; height: 100%; }
-.drive .steer.bar .steer-turn svg { width: 170px; height: auto; }
-.pedals { position: absolute; right: max(18px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); display: flex; align-items: flex-end; gap: 12px; }
-.pedal { display: grid; place-items: end center; padding-bottom: 10px; border-radius: 18px; background: linear-gradient(#3b3542, #221e28); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.12); color: rgba(255, 255, 255, 0.8); font: 800 11px "Nunito", sans-serif; letter-spacing: 0.08em; transition: transform 0.08s ease, filter 0.08s ease; background-image: repeating-linear-gradient(0deg, transparent 0 12px, rgba(255, 255, 255, 0.07) 12px 15px), linear-gradient(#3b3542, #221e28); }
+/* Driving on a phone: drag anywhere to steer; brake bottom-left, go bottom-right */
+.drive .pedal { position: absolute; bottom: max(16px, env(safe-area-inset-bottom)); touch-action: none; }
+.drive .pedal.brake { left: max(20px, env(safe-area-inset-left)); }
+.drive .pedal.gas { right: max(20px, env(safe-area-inset-right)); }
+.pedal { display: grid; place-items: end center; padding-bottom: 12px; border-radius: 22px; color: rgba(255, 255, 255, 0.9); font: 900 12px "Nunito", sans-serif; letter-spacing: 0.1em; transition: transform 0.08s ease, filter 0.08s ease, box-shadow 0.08s ease; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.14); background: repeating-linear-gradient(0deg, transparent 0 12px, rgba(255, 255, 255, 0.08) 12px 15px), linear-gradient(#3b3542, #1d1922); }
 .pedal span { pointer-events: none; }
-.pedal.brake { width: 74px; height: 92px; }
-.pedal.gas { width: 66px; height: 120px; }
-.pedal.gas.on { transform: perspective(300px) rotateX(18deg) scale(0.96); filter: brightness(1.35); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3), inset 0 0 0 2px #22c55e; }
-.pedal.brake.on { transform: perspective(300px) rotateX(18deg) scale(0.96); filter: brightness(1.35); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3), inset 0 0 0 2px #ef4444; }
+.pedal.brake { width: 92px; height: 100px; }
+.pedal.gas { width: 80px; height: 132px; background: repeating-linear-gradient(0deg, transparent 0 12px, rgba(255, 255, 255, 0.1) 12px 15px), linear-gradient(#2f6b45, #173a26); }
+.pedal.brake { background: repeating-linear-gradient(0deg, transparent 0 12px, rgba(255, 255, 255, 0.1) 12px 15px), linear-gradient(#7a2a2a, #3c1414); }
+.pedal.gas.on { transform: perspective(300px) rotateX(18deg) scale(0.96); filter: brightness(1.35); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3), inset 0 0 0 3px #22c55e; }
+.pedal.brake.on { transform: perspective(300px) rotateX(18deg) scale(0.96); filter: brightness(1.35); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3), inset 0 0 0 3px #ef4444; }
 @media (pointer: coarse) { .seated.riding { top: max(52px, calc(env(safe-area-inset-top) + 46px)); bottom: auto; } }
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
-  .seated.riding { left: 50%; right: auto; transform: translateX(-50%); top: max(44px, env(safe-area-inset-top)); bottom: auto; max-width: 60vw; }
-  .drive .steer.wheel { width: 130px; height: 130px; }
-  .drive .steer.bar { width: 170px; height: 96px; }
-  .pedal.brake { width: 66px; height: 82px; }
-  .pedal.gas { width: 58px; height: 106px; }
-}
-@media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
-  .drive ~ .chat { left: calc(max(18px, env(safe-area-inset-left)) + 190px); }
+  .seated.riding { left: 50%; right: auto; transform: translateX(-50%); top: max(44px, env(safe-area-inset-top)); bottom: auto; max-width: 64vw; }
+  .pedal.brake { width: 80px; height: 88px; }
+  .pedal.gas { width: 70px; height: 114px; }
+  .drive ~ .chat { left: calc(max(20px, env(safe-area-inset-left)) + 96px); }
 }
 
 /* The HUD menu: settings, how to play, the classic site */
@@ -265,6 +261,7 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 13px; font-w
 .hud-menu-title { margin: 6px 8px 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #8a7d97; }
 .hud-menu-row, .hud-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 10px 12px; border: 0; border-radius: 14px; background: #fff; color: #2b2238; font: 700 14px "Nunito", sans-serif; text-decoration: none; cursor: pointer; margin-bottom: 6px; box-shadow: 0 1px 4px rgba(43, 34, 56, 0.06); }
 .hud-menu-item b { color: #be185d; font-weight: 800; }
+.jump { max-width: 170px; padding: 6px 28px 6px 10px; border: 0; border-radius: 999px; background: #efe7f2 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23554a63' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 10px center; font: 800 12px "Nunito", sans-serif; color: #2b2238; appearance: none; -webkit-appearance: none; cursor: pointer; }
 .seg { display: inline-flex; padding: 3px; border-radius: 999px; background: #efe7f2; }
 .seg button { padding: 5px 10px; border: 0; border-radius: 999px; background: transparent; color: #554a63; font: 800 12px "Nunito", sans-serif; cursor: pointer; }
 .seg button.on { background: #2b2238; color: #fff; }

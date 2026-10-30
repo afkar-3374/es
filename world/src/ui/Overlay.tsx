@@ -33,6 +33,7 @@ export function Overlay() {
         else if (ui.get().seated) standUp();
       }
       if (e.code === 'KeyH' && ui.get().riding) ride.honk();
+      if (e.code === 'KeyV' && ui.get().riding) ride.toggleView();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -88,10 +89,13 @@ export function Overlay() {
       {riding && !busy && (
         <div className="seated riding">
           <span>
-            {riding.emoji} {riding.name} · <b id="speedo">0 km/h</b> · {isTouch ? (riding.id === 'car' ? 'wheel: steer · pedals: go & brake' : 'handlebar: steer · pedals: go & brake') : 'W/S: go & brake · A/D: steer'}
+            {riding.emoji} {riding.name} · <b id="speedo">0 km/h</b> · {isTouch ? 'drag to steer · GO & BRAKE' : 'look to steer · W go · S brake · V view'}
           </span>
           <button type="button" onClick={() => ride.honk()}>
             📯 Horn{k('H')}
+          </button>
+          <button type="button" onClick={() => ride.toggleView()}>
+            🎥 View{k('V')}
           </button>
           <button type="button" onClick={() => ride.dismount()}>
             Get off{k('E')}
