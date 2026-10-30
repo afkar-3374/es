@@ -3,7 +3,8 @@ import { isTouch } from '../player/input';
 
 const portraitQuery = matchMedia('(orientation: portrait)');
 
-const standalone = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
+// installed to the home screen, or inside the ES Town Android app: already full screen and sideways
+const standalone = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.userAgent.includes('ESTownApp');
 
 /**
  * The town always fills the whole screen, with no browser bars: full screen on every
