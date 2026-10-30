@@ -229,6 +229,28 @@ function heightAt(x, z) {
   const t = Math.min(1, d / 120);
   return h * t * t * (3 - 2 * t);
 }
+// What covers the ground (tools/fetch-landcover.py, ESA WorldCover classes): 10 trees,
+// 20 shrubs, 30 grass, 40 crops (paddy), 50 built-up, 60 bare, 80 water, 90 wetland, 95 mangroves
+let cover = null;
+try {
+  const info = JSON.parse(readFileSync(join(CACHE, 'landcover.json'), 'utf8'));
+  cover = { ...info, data: readFileSync(join(CACHE, 'landcover.bin')) };
+} catch {
+  console.log('no land cover: palms in groves everywhere');
+}
+function coverAt(x, z) {
+  if (!cover) return 0;
+  const [ex, ez] = unworld([x, z]);
+  const lat = SITE.lat - ez / KZ;
+  const lon = SITE.lon + ex / KX;
+  const i = Math.floor(((lon - cover.west) / (cover.east - cover.west)) * cover.width);
+  const j = Math.floor(((cover.north - lat) / (cover.north - cover.south)) * cover.height);
+  if (i < 0 || j < 0 || i >= cover.width || j >= cover.height) return 0;
+  return cover.data[j * cover.width + i];
+}
+/** Land-cover cells per tile side (25 m each), run-length coded: [class, count, …] */
+const CN = 40;
+
 /** Grid spacing of each tile's heights (metres); tiles share their edge rows. */
 const HSTEP = 40;
 const HN = TILE / HSTEP + 1;
@@ -933,6 +955,16 @@ for (const [k, t] of tiles) {
   const { bits, count } = waterMask(t);
   waterTiles.set(k, { bits, count });
   const data = { b: t.b, h: t.h, o: t.o, s: t.s };
+  if (cover) {
+    const runs = [];
+    for (let r = 0; r < CN; r++)
+      for (let q = 0; q < CN; q++) {
+        const v = coverAt(t.i * TILE + (q + 0.5) * (TILE / CN), t.j * TILE + (r + 0.5) * (TILE / CN));
+        if (runs.length && runs[runs.length - 2] === v && runs[runs.length - 1] < 255) runs[runs.length - 1]++;
+        else runs.push(v, 1);
+      }
+    data.c = Buffer.from(runs).toString('base64');
+  }
   if (terrain) {
     // ground heights, decimetres, row by row (z) from the tile's corner
     const g = new Int16Array(HN * HN);
@@ -1067,6 +1099,8 @@ writeFileSync(
     north: NORTH.map((n) => Math.round(n * 1e6) / 1e6),
     tile: TILE,
     cell: CELL,
+    /** land cover: `cn` cells a side per tile (absent: none) */
+    cn: cover ? CN : 0,
     /** ground heights: every `hstep` metres, `hn` a side per tile (absent: flat) */
     hstep: terrain ? HSTEP : 0,
     hn: terrain ? HN : 0,

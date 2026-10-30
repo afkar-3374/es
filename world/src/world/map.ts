@@ -24,6 +24,8 @@ export interface Meta {
   north: [number, number];
   tile: number;
   cell: number;
+  /** land cover: `cn` cells a side per tile */
+  cn?: number;
   /** ground heights every `hstep` metres, `hn` a side per tile (0: flat ground) */
   hstep?: number;
   hn?: number;
@@ -58,6 +60,8 @@ export interface TileData {
   w?: 1 | string;
   /** ground heights: base64 int16 decimetres, row by row from the tile's corner */
   g?: string;
+  /** land cover (ESA WorldCover classes), base64 runs of [class, count] row by row */
+  c?: string;
 }
 
 export interface Tile {
@@ -69,6 +73,8 @@ export interface Tile {
   water: Uint8Array | null;
   /** ground heights, metres (null: flat) */
   ground: Float32Array | null;
+  /** land cover per cell (null: unknown) */
+  cover: Uint8Array | null;
 }
 
 export const RAIL = 8;
@@ -136,7 +142,15 @@ export function loadTile(key: string) {
             const dm = new Int16Array(b.buffer);
             ground = Float32Array.from(dm, (v) => v / 10);
           }
-          const tile = { key, i, j, data, water, ground };
+          let cover: Uint8Array | null = null;
+          const cn = meta?.cn;
+          if (data.c && cn) {
+            const runs = Uint8Array.from(atob(data.c), (c) => c.charCodeAt(0));
+            cover = new Uint8Array(cn * cn);
+            let k = 0;
+            for (let r = 0; r + 1 < runs.length; r += 2) cover.fill(runs[r], k, (k += runs[r + 1]));
+          }
+          const tile = { key, i, j, data, water, ground, cover };
           loaded.set(key, tile);
           pending.delete(key);
           changed();
@@ -246,3 +260,16 @@ export function groundAt(x: number, z: number) {
   const t = loaded.get(tileKey(x, z));
   return t ? tileGround(t, x, z) : 0;
 }
+
+/** What covers the ground at (x, z) on a tile: ESA WorldCover's class (0 if unknown). */
+export function tileCover(t: Tile, x: number, z: number) {
+  const meta = getMeta();
+  if (!t.cover || !meta?.cn) return 0;
+  const n = meta.cn;
+  const q = Math.min(n - 1, Math.max(0, Math.floor(((x - t.i * meta.tile) / meta.tile) * n)));
+  const r = Math.min(n - 1, Math.max(0, Math.floor(((z - t.j * meta.tile) / meta.tile) * n)));
+  return t.cover[r * n + q];
+}
+
+/** Land-cover classes (ESA WorldCover) */
+export const COVER = { trees: 10, shrubs: 20, grass: 30, crops: 40, built: 50, bare: 60, water: 80, wetland: 90, mangroves: 95 } as const;

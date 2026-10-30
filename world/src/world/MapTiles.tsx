@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useRapier } from '@react-three/rapier';
 import type { Collider } from '@dimforge/rapier3d-compat';
@@ -10,7 +11,7 @@ import { world } from './state';
 import { Lamp, VirtualLight } from './Lamps';
 import { Palms, type PalmSpot } from './Palms';
 import { rng } from './layout';
-import { boxDistance, cellsPerTile, forgetTilesFarFrom, getMeta, hasTile, isWater, loadedTile, loadMeta, loadTile, onMapChange, RAIL, tileGround, tileKey, waterRects, type Tile } from './map';
+import { boxDistance, cellsPerTile, forgetTilesFarFrom, getMeta, COVER, hasTile, isWater, loadedTile, loadMeta, loadTile, onMapChange, RAIL, tileCover, tileGround, tileKey, waterRects, type Tile } from './map';
 
 /*
  * Kasaragod beyond the Electrosparkzz street: the real roads, buildings, rivers and sea
@@ -437,6 +438,7 @@ function landGeometry(t: Tile) {
   const step = meta.hstep;
   const pos = new Float32Array(n * n * 3);
   const uv = new Float32Array(n * n * 2);
+  const col = new Float32Array(n * n * 3);
   for (let r = 0; r < n; r++)
     for (let q = 0; q < n; q++) {
       const k = r * n + q;
@@ -444,6 +446,15 @@ function landGeometry(t: Tile) {
       const z = t.j * meta.tile + r * step;
       pos.set([x, t.ground[k] - 0.03, z], k * 3);
       uv.set([x / 4, z / 4], k * 2);
+      // the ground's colour from what grows (or doesn't) there, blended across a few cells
+      let cr = 0, cg = 0, cb = 0;
+      for (const [dx, dz] of [[0, 0], [-12, -12], [12, -12], [-12, 12], [12, 12]]) {
+        const c = GROUND_TINT[tileCover(t, x + dx, z + dz)] ?? GROUND_TINT[0];
+        cr += c[0] / 5;
+        cg += c[1] / 5;
+        cb += c[2] / 5;
+      }
+      col.set([cr, cg, cb], k * 3);
     }
   const index: number[] = [];
   for (let r = 0; r < n - 1; r++)
@@ -458,11 +469,26 @@ function landGeometry(t: Tile) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setIndex(index);
   g.computeVertexNormals();
   g.computeBoundingSphere();
   return g;
 }
+
+/** How the grass looks over each kind of ground (ESA WorldCover class → tint) */
+const GROUND_TINT: Record<number, [number, number, number]> = {
+  0: [1, 1, 1],
+  [COVER.trees]: [0.78, 0.92, 0.72], // shade under the trees
+  [COVER.shrubs]: [0.98, 0.96, 0.8],
+  [COVER.grass]: [1.05, 1.08, 0.86],
+  [COVER.crops]: [1.08, 1.28, 0.7], // bright paddy
+  [COVER.built]: [1.12, 0.92, 0.78], // dusty laterite
+  [COVER.bare]: [1.35, 0.95, 0.72], // red laterite
+  [COVER.water]: [1.45, 1.35, 1.05], // sand at the water's edge
+  [COVER.wetland]: [0.82, 1.05, 0.88],
+  [COVER.mangroves]: [0.7, 0.86, 0.72],
+};
 
 /** The hand-made street and its shops (they have their own lamps and palms). */
 const SITE = { x0: -64, x1: 64, z0: -34, z1: 40 };
@@ -548,8 +574,20 @@ function roadTester(t: Tile, pad: number) {
   };
 }
 
-/** Coconut palms over the open land: in groves, off the roads, clear of buildings and water. */
-function scatterPalms(t: Tile): PalmSpot[] {
+/** How thickly trees grow on each kind of ground (chance per 16 m square) */
+const TREES: Record<number, number> = {
+  [COVER.trees]: 0.5,
+  [COVER.mangroves]: 0.7,
+  [COVER.shrubs]: 0.14,
+  [COVER.grass]: 0.04,
+  [COVER.crops]: 0.025, // a palm on the bund now and then
+  [COVER.built]: 0.09,
+  [COVER.bare]: 0.02,
+  [COVER.wetland]: 0.08,
+};
+
+/** Coconut palms and leafy trees over the land, as thick as what really grows there, off the roads, clear of buildings and water. */
+function scatterPalms(t: Tile): { palms: PalmSpot[]; trees: PalmSpot[] } {
   const meta = getMeta()!;
   const size = meta.tile;
   const ox = t.i * size;
@@ -570,14 +608,17 @@ function scatterPalms(t: Tile): PalmSpot[] {
   }
   const rand = rng(t.i * 7919 + t.j * 104729 + 17);
   const out: PalmSpot[] = [];
+  const trees: PalmSpot[] = [];
   const STEP = 16;
   for (let gz = 0; gz < size; gz += STEP)
     for (let gx = 0; gx < size; gx += STEP) {
       const x = ox + gx + rand() * STEP;
       const z = oz + gz + rand() * STEP;
-      // groves: thick in places, sparse in others
+      // as thick as what really grows there (or, without land cover, in groves)
+      const kind = tileCover(t, x, z);
       const grove = (Math.sin(x / 83) + Math.sin(z / 61 + x / 140) + 2) / 4;
-      if (rand() > grove * grove * 0.75) continue;
+      const density = t.cover ? (TREES[kind] ?? 0) : grove * grove * 0.75;
+      if (rand() > density) continue;
       if (x >= ox + size || z >= oz + size || inSite(x, z) || isWater(x, z)) continue;
       const cell = Math.floor((z - oz) / CELL) * N + Math.floor((x - ox) / CELL);
       if (onRoad(x, z)) continue;
@@ -589,10 +630,64 @@ function scatterPalms(t: Tile): PalmSpot[] {
         return Math.abs(u) < hx && Math.abs(v) < hz;
       });
       if (inBuilding) continue;
-      out.push({ x, z, y: tileGround(t, x, z), scale: 0.8 + rand() * 0.45, turn: rand() * Math.PI * 2 });
-      if (out.length >= 520) return out;
+      // coconut palms, or (in woods and mangroves) leafy trees
+      const leafy = kind === COVER.mangroves || (kind === COVER.trees && rand() < 0.45) || (kind === COVER.shrubs && rand() < 0.6);
+      // woodland trees grow big; scrub stays low
+      const scale = leafy ? (kind === COVER.shrubs ? 0.45 : kind === COVER.trees ? 1.1 : 0.8) + rand() * 0.5 : 0.8 + rand() * 0.45;
+      (leafy ? trees : out).push({ x, z, y: tileGround(t, x, z), scale, turn: rand() * Math.PI * 2 });
+      if (out.length + trees.length >= 850) return { palms: out, trees };
     }
-  return out;
+  return { palms: out, trees };
+}
+
+/** A leafy tree (mango, jackfruit, the woods): a trunk and a few clumps of leaves, low-poly. */
+const LEAF_TREE = (() => {
+  const trunk = new THREE.CylinderGeometry(0.16, 0.26, 3.2, 6, 1).translate(0, 1.6, 0);
+  const clumps = [
+    [0, 4.6, 0, 2.3],
+    [1.3, 4.1, 0.4, 1.6],
+    [-1.1, 4.2, -0.6, 1.7],
+    [0.2, 5.4, -0.9, 1.5],
+  ].map(([x, y, z, r]) => new THREE.IcosahedronGeometry(r, 1).translate(x, y, z));
+  return { trunk, leaves: mergeGeometries(clumps.map((g) => g.toNonIndexed()))! };
+})();
+const TREE_MATS = {
+  trunk: new THREE.MeshStandardMaterial({ color: '#5b4636', roughness: 1 }),
+  leaves: new THREE.MeshStandardMaterial({ color: '#3f6b2f', roughness: 0.9, flatShading: true }),
+};
+
+function LeafyTrees({ spots }: { spots: PalmSpot[] }) {
+  const trunks = useRef<THREE.InstancedMesh>(null);
+  const leaves = useRef<THREE.InstancedMesh>(null);
+  useLayoutEffect(() => {
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const v = new THREE.Vector3();
+    const s = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0);
+    const shade = new THREE.Color();
+    spots.forEach((p, i) => {
+      q.setFromAxisAngle(up, p.turn ?? 0);
+      const k = p.scale ?? 1;
+      m.compose(v.set(p.x, p.y ?? 0, p.z), q, s.set(k, k * (0.85 + ((i * 37) % 10) / 30), k));
+      trunks.current?.setMatrixAt(i, m);
+      leaves.current?.setMatrixAt(i, m);
+      // no two quite the same green
+      leaves.current?.setColorAt(i, shade.setHSL(0.27 + ((i * 13) % 9) / 100, 0.45, 0.32 + ((i * 7) % 10) / 100));
+    });
+    for (const r of [trunks, leaves]) {
+      if (!r.current) continue;
+      r.current.instanceMatrix.needsUpdate = true;
+      if (r.current.instanceColor) r.current.instanceColor.needsUpdate = true;
+      r.current.computeBoundingSphere();
+    }
+  }, [spots]);
+  return (
+    <group>
+      <instancedMesh ref={trunks} args={[LEAF_TREE.trunk, TREE_MATS.trunk, spots.length]} castShadow receiveShadow raycast={noRaycast} />
+      <instancedMesh ref={leaves} args={[LEAF_TREE.leaves, TREE_MATS.leaves, spots.length]} castShadow receiveShadow raycast={noRaycast} />
+    </group>
+  );
 }
 
 /** Lights for a tile's lamps (shared real lights go to the nearest ones at night). */
@@ -816,7 +911,7 @@ interface Mats {
 function TileView({ tile, mats, near }: { tile: Tile; mats: Mats; near: boolean }) {
   const built = useMemo<Built>(() => buildTile(tile), [tile]);
   const signs = useMemo(() => (near ? buildSigns(tile) : null), [tile, near]);
-  const palms = useMemo(() => (near ? scatterPalms(tile) : []), [tile, near]);
+  const greenery = useMemo(() => (near ? scatterPalms(tile) : { palms: [], trees: [] }), [tile, near]);
   const boardMat = useMemo(() => (signs ? new THREE.MeshStandardMaterial({ map: signs.texture, roughness: 0.5 }) : null), [signs]);
   useEffect(
     () => () => {
@@ -855,7 +950,8 @@ function TileView({ tile, mats, near }: { tile: Tile; mats: Mats; near: boolean 
       {built.heads && <mesh geometry={built.heads} material={mats.lampHead} raycast={noRaycast} />}
       {built.glows && <mesh geometry={built.glows} material={mats.glow} renderOrder={1} raycast={noRaycast} />}
       {near && built.lamps.length > 0 && <TileLamps at={built.lamps} />}
-      {palms.length > 0 && <Palms spots={palms} />}
+      {greenery.palms.length > 0 && <Palms spots={greenery.palms} />}
+      {greenery.trees.length > 0 && <LeafyTrees spots={greenery.trees} />}
     </group>
   );
 }
@@ -1022,7 +1118,7 @@ export function MapTiles() {
       paint: offset(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide }), -2),
       walls: new THREE.MeshStandardMaterial({ map: facadeTexture(), vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }),
       plain: Object.assign(plaster, { vertexColors: true, side: THREE.DoubleSide }),
-      land: offset(land, 5),
+      land: offset(Object.assign(land, { vertexColors: true }), 5),
       tiled: Object.assign(clay, { vertexColors: true, side: THREE.DoubleSide }),
       tank: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45 }),
       roofs: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide }),
