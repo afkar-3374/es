@@ -1151,7 +1151,7 @@ function TileView({ tile, mats, near }: { tile: Tile; mats: Mats; near: boolean 
       {built.heads && <mesh geometry={built.heads} material={mats.lampHead} raycast={noRaycast} />}
       {built.glows && <mesh geometry={built.glows} material={mats.glow} renderOrder={1} raycast={noRaycast} />}
       {built.boards && <mesh geometry={built.boards} material={mats.boards} receiveShadow raycast={noRaycast} />}
-      {built.wires && <lineSegments geometry={built.wires} material={mats.wire} raycast={noRaycast} />}
+      {near && built.wires && <lineSegments geometry={built.wires} material={mats.wire} raycast={noRaycast} />}
       {near && built.lamps.length > 0 && <TileLamps at={built.lamps} />}
       {greenery.palms.length > 0 && <Palms spots={greenery.palms} />}
       {greenery.trees.length > 0 && <LeafyTrees spots={greenery.trees} />}
@@ -1315,6 +1315,11 @@ export function MapTiles() {
     // flat layers lie a hair apart; push the lower ones back so far roads don't flicker
     const offset = <M extends THREE.Material>(m: M, units: number) => Object.assign(m, { polygonOffset: true, polygonOffsetFactor: units, polygonOffsetUnits: units * 2 });
     offset(grass, 6);
+    // the texture is dry brown grass: turn it monsoon-green (Kerala is green most of the year)
+    for (const m of [grass, land]) {
+      m.color.setRGB(1.05, 2.35, 1.35);
+      m.userData.baseColor = m.color.clone();
+    }
     return {
       asphalt: offset(Object.assign(asphalt, { side: THREE.DoubleSide }), 0),
       ground: offset(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }), 2),

@@ -8,6 +8,7 @@ import { noRaycast } from './merge';
 import { world } from './state';
 import { getMeta, hasTile, loadTile, tileGround, useMeta, type Meta, type Tile } from './map';
 import { useReal } from './real';
+import { SPECS, VehicleModel, type VehicleKind } from './vehicleModels';
 import { bastion, hash, inRing, Kit, keralaBuilding, offsetRing, simplify, wallLine, type MatKey, type SignSpec, type Solid, type V2 } from './Kit';
 
 /*
@@ -29,6 +30,8 @@ interface Def {
   /** its grounds: plain buildings and trees stay out (own metres) */
   clear: V2[][];
   build: (k: Kit) => void;
+  /** vehicles parked there (own metres; yaw as three.js turns, vehicles face +x) */
+  props?: { kind: VehicleKind; x: number; z: number; yaw: number; color?: string }[];
 }
 
 /* ── Bekal Fort ───────────────────────────────────────────────── */
@@ -241,6 +244,98 @@ function nileshwar(k: Kit) {
   k.sign(2.5, 16, 0, 'NILESHWAR PALACE', 'നീലേശ്വരം കോവിലകം');
 }
 
+/* ── Kasaragod railway station ────────────────────────────────── */
+
+// along the main line (OSM 98623859): its direction, and a point on it by the station
+const RAIL_DIR: V2 = [0.375, 0.927];
+const RAIL_AT: V2 = [-10, 3];
+const RAIL_YAW = Math.atan2(-RAIL_DIR[1], RAIL_DIR[0]);
+/** a point `a` metres along the line and `w` metres west of the main line (station space → own metres) */
+const railPt = (a: number, w: number): V2 => [RAIL_AT[0] + RAIL_DIR[0] * a - RAIL_DIR[1] * w, RAIL_AT[1] + RAIL_DIR[1] * a + RAIL_DIR[0] * w];
+
+/** The station's name board: English, then Malayalam, Kannada and Hindi */
+function stationBoard(k: Kit, a: number, w: number) {
+  const [x, z] = railPt(a, w);
+  k.at(x, z, RAIL_YAW, () => k.sign(0, 0, Math.PI / 2, 'KASARAGOD', 'കാസർഗോഡ് · ಕಾಸರಗೋಡು · कासरगोड'));
+}
+
+function railwayStation(k: Kit) {
+  k.at(...RAIL_AT, RAIL_YAW, () => {
+    // (in here x runs along the line, z westwards across it)
+    const platform = (w: number, width: number, from: number, to: number) => {
+      for (let a = from; a < to; a += 20) {
+        const g = Math.min(k.gy(a, w), k.gy(a + 20, w));
+        k.tinted('#c9c2b6', () => k.box('stone', a + 10, g - 1, w, 20.2, 1.9, width, 0, true));
+        // the yellow safety line along each edge
+        for (const e of [-1, 1]) k.box('gold', a + 10, g + 0.9, w + e * (width / 2 - 0.35), 20.2, 0.02, 0.2);
+      }
+    };
+    // platform 1 (east of the main line) and the island between the loop line and the siding
+    platform(-6.9, 8, -150, 150);
+    platform(12.1, 9, -130, 130);
+    // canopies on steel posts over the middle of each
+    for (const [w, width] of [[-6.9, 8], [12.1, 9]] as [number, number][]) {
+      for (let a = -60; a <= 60; a += 10) {
+        const g = k.gy(a, w) + 0.9;
+        k.tinted('#6b2a2a', () => k.box('white', a, g, w, 0.25, 4.3, 0.25, 0, true));
+      }
+      const g = k.gy(0, w) + 0.9;
+      k.tinted('#b8bcc0', () => k.box('white', 0, g + 4.3, w, 124, 0.18, width + 1.5));
+      k.tinted('#7a2626', () => k.box('white', 0, g + 4.15, w, 124, 0.15, 0.3));
+    }
+    // the station building beside platform 1: cream walls, a maroon band, a long sloped porch
+    const gb = k.gy(0, -19.4);
+    k.at(0, -19.4, 0, () => {
+      k.tinted('#efe2b4', () => k.box('plaster', 0, gb - 0.5, 0, 64, 7.4, 13, 0, true));
+      k.tinted('#7a2626', () => {
+        k.box('white', 0, gb + 3.2, 0, 64.3, 0.5, 13.3);
+        k.box('white', 0, gb + 6.9, 0, 64.6, 0.6, 13.6);
+      });
+      for (let x = -28; x <= 28; x += 4) {
+        k.box('dark', x, gb + 0.9, -6.53, 1.6, 2.1, 0.06);
+        k.box('dark', x, gb + 4.2, -6.53, 1.3, 1.5, 0.06);
+      }
+      // the road-side porch
+      k.tinted('#7a2626', () => k.keralaRoof('tiles', 30, 6, gb + 3.6, 1.2, { overhang: 0.4 }));
+    });
+    // a footbridge across the lines
+    const gf = k.gy(40, 2);
+    for (const w of [-6.9, 12.1]) k.tinted('#5a6066', () => k.box('white', 40, gf, w, 3, 7.2, 3, 0, true));
+    k.tinted('#5a6066', () => {
+      k.box('white', 40, gf + 6.2, 2.6, 3, 0.3, 19);
+      for (const e of [-1, 1]) k.box('white', 40 + e * 1.45, gf + 6.5, 2.6, 0.1, 1.4, 19);
+      k.box('white', 40, gf + 7.9, 2.6, 3.2, 0.12, 19.4);
+    });
+  });
+  stationBoard(k, -110, -26);
+  stationBoard(k, 110, -26);
+}
+
+/* ── KSRTC bus stand, Kasaragod ───────────────────────────────── */
+
+function ksrtc(k: Kit) {
+  // the yard
+  const yard: V2[] = [[-35, -50], [84, -66], [98, 12], [-38, -8]];
+  let lo = Infinity;
+  for (const [x, z] of yard) lo = Math.min(lo, k.gy(x, z));
+  k.tinted('#55575a', () => k.prism('stone', yard, lo - 1, lo + 0.08));
+  // the passenger platform and its long concrete canopy, in front of the shopping complex
+  k.at(30, -16, 0.12, () => {
+    const g = k.gy(0, 0);
+    k.tinted('#bdb6aa', () => k.box('stone', 0, g - 0.6, 0, 92, 0.9, 8, 0, true));
+    for (let x = -44; x <= 44; x += 8)
+      for (const z of [-3, 3]) k.tinted('#e9e4d8', () => k.box('white', x, g + 0.3, z, 0.5, 4.6, 0.5, 0, true));
+    k.tinted('#efe9dc', () => k.box('white', 0, g + 4.9, 0, 94, 0.45, 10));
+    k.tinted('#b3171d', () => k.box('white', 0, g + 4.6, -5.05, 94, 0.5, 0.12));
+    // benches
+    for (let x = -40; x <= 40; x += 8) k.tinted('#2f6f9f', () => k.box('white', x + 4, g + 0.3, 1.5, 3, 0.45, 0.5));
+    // bay numbers on the canopy's edge, and the name across the middle
+    k.sign(0, -6.2, Math.PI, 'KSRTC BUS STAND', 'കെ.എസ്.ആർ.ടി.സി ബസ് സ്റ്റാൻഡ് · കാസർഗോഡ്');
+  });
+  // the enquiry booth
+  k.at(-26, -40, 0, () => keralaBuilding(k, 5, 4, { wallH: 2.8, roofH: 1.8, plinth: 0.3 }));
+}
+
 const rect = (x0: number, z0: number, x1: number, z1: number): V2[] => [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
 
 const DEFS: Def[] = [
@@ -250,6 +345,24 @@ const DEFS: Def[] = [
   { id: 'ananthapura', lat: 12.5842, lon: 74.98206, r: 60, clear: [rect(-40, -30, 22, 36)], build: ananthapura },
   { id: 'madhur', lat: 12.55349, lon: 75.01018, r: 60, clear: [rect(-48, -38, 36, 38)], build: madhur },
   { id: 'malik', lat: 12.4849, lon: 74.989, r: 50, clear: [rect(-30, -30, 30, 32)], build: malikDeenar },
+  {
+    id: 'railway',
+    lat: 12.49141,
+    lon: 74.98771,
+    r: 200,
+    clear: [[railPt(-160, -26), railPt(160, -26), railPt(160, 18), railPt(-160, 18)]],
+    build: railwayStation,
+  },
+  {
+    id: 'ksrtc',
+    lat: 12.50257,
+    lon: 74.98784,
+    r: 100,
+    clear: [rect(-38, -70, 99, -3)],
+    build: ksrtc,
+    // buses at their bays, noses to the platform (north)
+    props: [0, 1, 2, 3, 4].map((i) => ({ kind: 'bus' as const, x: -6 + i * 16, z: -36 + i * 1.9, yaw: Math.PI / 2 + 0.12 })),
+  },
   { id: 'nileshwar', lat: 12.25624, lon: 75.12926, r: 30, clear: [rect(-12, -12, 17, 19)], build: nileshwar },
 ];
 
@@ -447,6 +560,7 @@ interface Built {
   geos: Map<MatKey, THREE.BufferGeometry>;
   solids: Solid[];
   signs: { mesh: THREE.Mesh; texture: THREE.Texture }[];
+  props: { kind: VehicleKind; x: number; y: number; z: number; yaw: number; color?: string }[];
 }
 
 /** Draw within this far of a landmark's edge (the fog hides more), solid within this. */
@@ -489,7 +603,13 @@ function LandmarkView({ p, mats }: { p: Placed; mats: Mats }) {
         mesh.raycast = noRaycast;
         return { mesh, texture };
       });
-      setBuilt({ geos: k.geometries(), solids: k.solids, signs });
+      const props = (p.def.props ?? []).map((v) => ({ ...v, y: G(v.x, v.z) + 0.08 }));
+      // parked vehicles are solid too
+      for (const v of props) {
+        const h = SPECS[v.kind].half;
+        k.solids.push({ kind: 'box', c: new THREE.Vector3(v.x, v.y + h[1], v.z), q: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), v.yaw), h: new THREE.Vector3(...h) });
+      }
+      setBuilt({ geos: k.geometries(), solids: k.solids, signs, props });
     });
     return () => {
       alive = false;
@@ -538,6 +658,11 @@ function LandmarkView({ p, mats }: { p: Placed; mats: Mats }) {
       ))}
       {built.signs.map((s, i) => (
         <primitive key={i} object={s.mesh} />
+      ))}
+      {built.props.map((v, i) => (
+        <group key={`v${i}`} position={[v.x, v.y, v.z]} rotation-y={v.yaw}>
+          <VehicleModel kind={v.kind} color={v.color ?? '#c9cdd2'} />
+        </group>
       ))}
     </group>
   );
