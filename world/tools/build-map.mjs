@@ -407,6 +407,47 @@ for (const w of ways.filter((w) => tag(w, 'railway') === 'rail' && w.geometry.so
   }
 }
 
+// The lines trains run on: the main (not service) tracks joined end to end into long runs,
+// within a metre of the track (for the trains: Train.tsx)
+const railLines = [];
+{
+  const mains = ways.filter((w) => tag(w, 'railway') === 'rail' && !tag(w, 'service') && w.geometry.some((p) => inDistrict(p.lat, p.lon))).map((w) => simplify(w.geometry.map(W), 2));
+  const key = (p) => `${Math.round(p[0])}_${Math.round(p[1])}`;
+  const used = new Set();
+  const ends = new Map();
+  mains.forEach((l, i) => {
+    for (const p of [l[0], l[l.length - 1]]) {
+      if (!ends.has(key(p))) ends.set(key(p), []);
+      ends.get(key(p)).push(i);
+    }
+  });
+  const length = (l) => l.reduce((a, p, i) => (i ? a + Math.hypot(p[0] - l[i - 1][0], p[1] - l[i - 1][1]) : 0), 0);
+  for (let i = 0; i < mains.length; i++) {
+    if (used.has(i)) continue;
+    used.add(i);
+    let line = mains[i].slice();
+    // grow at both ends while another piece carries on from there
+    for (const atEnd of [true, false]) {
+      for (;;) {
+        const tip = atEnd ? line[line.length - 1] : line[0];
+        const next = (ends.get(key(tip)) ?? []).find((j) => !used.has(j));
+        if (next === undefined) break;
+        used.add(next);
+        let piece = mains[next].slice();
+        if (atEnd) {
+          if (key(piece[0]) !== key(tip)) piece.reverse();
+          line = line.concat(piece.slice(1));
+        } else {
+          if (key(piece[piece.length - 1]) !== key(tip)) piece.reverse();
+          line = piece.slice(0, -1).concat(line);
+        }
+      }
+    }
+    if (length(line) > 1500) railLines.push(simplify(line, 0.8).map(([x, z]) => [Math.round(x * 10) / 10, Math.round(z * 10) / 10]));
+  }
+  console.log(`${railLines.length} railway lines for trains (${railLines.map((l) => (length(l) / 1000).toFixed(1)).join(', ')} km)`);
+}
+
 /* ── Buildings ────────────────────────────────────────────────── */
 
 const hash = (n) => {
@@ -1214,6 +1255,8 @@ writeFileSync(
     destinations,
     /** bus stops: [x, z, road direction (mrad, the shelter's back to the road's left), name] */
     busStops,
+    /** the railway lines trains run on: [x, z] every few metres */
+    railLines,
   })
 );
 console.log(`overview ${IW}×${IH}; done`);

@@ -16,6 +16,7 @@ import { Landmarks } from './world/Landmarks';
 import { GoogleTiles } from './world/GoogleTiles';
 import { BusStops } from './world/BusStops';
 import { Pedestrians } from './world/Pedestrians';
+import { Train } from './world/Train';
 import { useReal } from './world/real';
 import { Cab } from './world/Cab';
 import { CabUi } from './ui/Cab';
@@ -177,6 +178,7 @@ export default function App() {
             {!OFF.has('vehicles') && <Vehicles />}
             {entered && !OFF.has('traffic') && <Traffic />}
             {entered && !OFF.has('people') && <Pedestrians />}
+            {!OFF.has('train') && <Train />}
             {entered && <Peers />}
             {entered && <Cab />}
             <Player start={START} startYaw={START_YAW} startPitch={START_PITCH} />

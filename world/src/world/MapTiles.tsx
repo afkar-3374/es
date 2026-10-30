@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useRapier } from '@react-three/rapier';
 import type { Collider } from '@dimforge/rapier3d-compat';
-import { applyWetness, usePBR } from './materials';
+import { applyWetness, canvasTexture, usePBR } from './materials';
 import { noRaycast } from './merge';
 import { PLASTER } from './Neighbours';
 import { world } from './state';
@@ -13,7 +13,7 @@ import { Palms, type PalmSpot } from './Palms';
 import { rng } from './layout';
 import { inLandmark } from './Landmarks';
 import { useReal } from './real';
-import { boxDistance, cellsPerTile, forgetTilesFarFrom, getMeta, COVER, hasTile, isWater, loadedTile, loadMeta, loadTile, onMapChange, RAIL, tileCover, tileGround, tileKey, waterRects, type Tile } from './map';
+import { boxDistance, cellsPerTile, forgetTilesFarFrom, getMeta, COVER, hasTile, isWater, loadedTile, loadMeta, loadTile, onMapChange, RAIL, tileCover, tileGround, tileKey, waterAt, waterRects, type Tile } from './map';
 
 /*
  * Kasaragod beyond the Electrosparkzz street: the real roads, buildings, rivers and sea
@@ -165,6 +165,8 @@ function buildTile(t: Tile) {
   const heads = new Mesh();
   const glows = new Mesh();
   const boards = new Mesh();
+  const sand = new Mesh();
+  const surf = new Mesh();
   const wires: number[] = [];
   const lamps: [number, number, number][] = [];
   // a shop's front faces a proper road (not a path)
@@ -340,6 +342,67 @@ function buildTile(t: Tile) {
       ];
       for (const [x, z] of q) water.vert(x, G(x, z) + 0.008, z, 0, 1, 0, x / 40, z / 40, blue);
     }
+    // beaches: open ground (sand, bare or by the water, as the land cover has it) within 40 m of
+    // the water is sand; the water along a beach breaks white
+    const N = cellsPerTile();
+    const dist = new Uint8Array(N * N).fill(255);
+    const queue: number[] = [];
+    for (let k = 0; k < N * N; k++)
+      if (waterAt(t, k % N, Math.floor(k / N))) {
+        dist[k] = 0;
+        queue.push(k);
+      }
+    for (let qi = 0; qi < queue.length; qi++) {
+      const k = queue[qi];
+      if (dist[k] >= 8) continue;
+      const cx = k % N;
+      const cz = Math.floor(k / N);
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx;
+        const nz = cz + dz;
+        if (nx < 0 || nz < 0 || nx >= N || nz >= N) continue;
+        const j = nz * N + nx;
+        if (dist[j] > dist[k] + 1) {
+          dist[j] = dist[k] + 1;
+          queue.push(j);
+        }
+      }
+    }
+    const sandy = (k: number) => {
+      if (dist[k] === 0 || dist[k] > 8) return false;
+      const x = ox + ((k % N) + 0.5) * cell;
+      const z = oz + (Math.floor(k / N) + 0.5) * cell;
+      const kind = tileCover(t, x, z);
+      return kind === COVER.bare || kind === COVER.water || (dist[k] <= 2 && kind === COVER.grass);
+    };
+    const isSand = new Uint8Array(N * N);
+    for (let k = 0; k < N * N; k++) if (sandy(k)) isSand[k] = 1;
+    const quad = (m: Mesh, cx: number, cz: number, lift: number, col: THREE.Color) => {
+      const x0 = ox + cx * cell;
+      const z0 = oz + cz * cell;
+      const x1 = x0 + cell;
+      const z1 = z0 + cell;
+      for (const [x, z] of [[x0, z0], [x1, z0], [x1, z1], [x0, z0], [x1, z1], [x0, z1]]) m.vert(x, G(x, z) + lift, z, 0, 1, 0, x / 6, z / 6, col);
+    };
+    for (let k = 0; k < N * N; k++) {
+      const cx = k % N;
+      const cz = Math.floor(k / N);
+      if (isSand[k]) quad(sand, cx, cz, 0.035, white1);
+      // surf: water right by the sand
+      else if (dist[k] === 0) {
+        let byBeach = false;
+        for (let dz = -2; dz <= 2 && !byBeach; dz++)
+          for (let dx = -2; dx <= 2; dx++) {
+            const nx = cx + dx;
+            const nz = cz + dz;
+            if (nx >= 0 && nz >= 0 && nx < N && nz < N && isSand[nz * N + nx]) {
+              byBeach = true;
+              break;
+            }
+          }
+        if (byBeach) quad(surf, cx, cz, 0.03, white1);
+      }
+    }
   }
 
   return {
@@ -353,6 +416,8 @@ function buildTile(t: Tile) {
     tiled: tiled.geometry(),
     tanks: tanks.geometry(),
     water: water.geometry(),
+    sand: sand.geometry(),
+    surf: surf.geometry(),
     posts: posts.geometry(),
     heads: heads.geometry(),
     glows: glows.geometry(),
@@ -360,6 +425,103 @@ function buildTile(t: Tile) {
     wires: wires.length ? new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(wires, 3)) : null,
     lamps,
   };
+}
+
+/** Ripples for the water: a tiling normal map made from a few crossing waves. */
+function waveNormals() {
+  const S = 256;
+  const h = new Float32Array(S * S);
+  const waves = Array.from({ length: 9 }, (_, i) => ({ kx: Math.round(Math.cos(i * 1.7) * (2 + i)), kz: Math.round(Math.sin(i * 1.7) * (2 + i)), a: 1 / (1 + i * 0.5), p: i * 2.1 }));
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++) {
+      let v = 0;
+      for (const w of waves) v += w.a * Math.sin(((w.kx * x + w.kz * y) / S) * Math.PI * 2 + w.p);
+      h[y * S + x] = v;
+    }
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  const img = g.createImageData(S, S);
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++) {
+      const dx = h[y * S + ((x + 1) % S)] - h[y * S + ((x - 1 + S) % S)];
+      const dy = h[((y + 1) % S) * S + x] - h[((y - 1 + S) % S) * S + x];
+      const n = new THREE.Vector3(-dx * 0.6, -dy * 0.6, 1).normalize();
+      const o = (y * S + x) * 4;
+      img.data[o] = (n.x * 0.5 + 0.5) * 255;
+      img.data[o + 1] = (n.y * 0.5 + 0.5) * 255;
+      img.data[o + 2] = (n.z * 0.5 + 0.5) * 255;
+      img.data[o + 3] = 255;
+    }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+/** Beach sand: pale, a little grainy, darker where the waves wet it (2 m a repeat at UV/6). */
+function sandTexture() {
+  return canvasTexture(256, 256, (g) => {
+    g.fillStyle = '#e3d3ae';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 5000; i++) {
+      const l = 60 + Math.random() * 30;
+      g.fillStyle = `hsla(40, 35%, ${l}%, 0.35)`;
+      g.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
+    }
+    for (let i = 0; i < 40; i++) {
+      g.fillStyle = 'rgba(150,120,80,0.08)';
+      g.beginPath();
+      g.ellipse(Math.random() * 256, Math.random() * 256, 20 + Math.random() * 40, 6 + Math.random() * 10, Math.random() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+  });
+}
+
+/** Foam: broken white streaks. */
+function foamTexture() {
+  return canvasTexture(256, 256, (g) => {
+    g.clearRect(0, 0, 256, 256);
+    for (let i = 0; i < 260; i++) {
+      g.fillStyle = `rgba(255,255,255,${0.25 + Math.random() * 0.5})`;
+      g.beginPath();
+      g.ellipse(Math.random() * 256, Math.random() * 256, 4 + Math.random() * 18, 1 + Math.random() * 3, Math.random() * 0.4, 0, Math.PI * 2);
+      g.fill();
+    }
+  });
+}
+
+/**
+ * Windows lit at night: the façade's window in a block of 8 bays × 8 floors, some lit warm
+ * (bulbs), some cool (tube lights), most dark. Repeats every 8 windows, so neighbours differ.
+ */
+const LIT = 8;
+function litWindows() {
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = S * LIT;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, S * LIT, S * LIT);
+  // the window's place in the façade texture (256 px there)
+  const [wx0, wx1, wy0, wy1] = [68 / 2, 188 / 2, 70 / 2, 182 / 2];
+  for (let j = 0; j < LIT; j++)
+    for (let i = 0; i < LIT; i++) {
+      const r = Math.random();
+      if (r > 0.42) continue;
+      g.fillStyle = r < 0.26 ? '#ffc777' : '#dfeaff';
+      g.fillRect(i * S + wx0, j * S + wy0, wx1 - wx0, wy1 - wy0);
+      // a curtain half drawn, now and then
+      if (Math.random() < 0.4) {
+        g.fillStyle = 'rgba(0,0,0,0.55)';
+        g.fillRect(i * S + wx0, j * S + wy0, (wx1 - wx0) * (0.3 + Math.random() * 0.4), wy1 - wy0);
+      }
+    }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(1 / LIT, 1 / LIT);
+  return t;
 }
 
 /** One window bay along a wall, and one floor up it (the façade texture's size) */
@@ -1107,6 +1269,8 @@ interface Mats {
   glow: THREE.MeshBasicMaterial;
   boards: THREE.MeshStandardMaterial;
   wire: THREE.LineBasicMaterial;
+  sand: THREE.MeshStandardMaterial;
+  surf: THREE.MeshBasicMaterial;
 }
 
 function TileView({ tile, mats, near }: { tile: Tile; mats: Mats; near: boolean }) {
@@ -1133,6 +1297,8 @@ function TileView({ tile, mats, near }: { tile: Tile; mats: Mats; near: boolean 
     <group>
       {built.land && <mesh geometry={built.land} material={mats.land} receiveShadow raycast={noRaycast} />}
       {built.water && <mesh geometry={built.water} material={mats.water} receiveShadow raycast={noRaycast} />}
+      {built.sand && <mesh geometry={built.sand} material={mats.sand} receiveShadow raycast={noRaycast} />}
+      {built.surf && <mesh geometry={built.surf} material={mats.surf} renderOrder={2} raycast={noRaycast} />}
       {built.ground && <mesh geometry={built.ground} material={mats.ground} receiveShadow raycast={noRaycast} />}
       {built.asphalt && <mesh geometry={built.asphalt} material={mats.asphalt} receiveShadow raycast={noRaycast} />}
       {built.paint && <mesh geometry={built.paint} material={mats.paint} receiveShadow raycast={noRaycast} />}
@@ -1324,13 +1490,15 @@ export function MapTiles() {
       asphalt: offset(Object.assign(asphalt, { side: THREE.DoubleSide }), 0),
       ground: offset(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, side: THREE.DoubleSide }), 2),
       paint: offset(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide }), -2),
-      walls: new THREE.MeshStandardMaterial({ map: facadeTexture(), vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }),
+      walls: new THREE.MeshStandardMaterial({ map: facadeTexture(), emissive: '#ffffff', emissiveMap: litWindows(), emissiveIntensity: 0, vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }),
       plain: Object.assign(plaster, { vertexColors: true, side: THREE.DoubleSide }),
       land: offset(Object.assign(land, { vertexColors: true }), 5),
       tiled: Object.assign(clay, { vertexColors: true, side: THREE.DoubleSide }),
       tank: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45 }),
       roofs: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide }),
-      water: offset(new THREE.MeshStandardMaterial({ color: '#3f8ea0', roughness: 0.12, metalness: 0.15, envMapIntensity: 1.4, side: THREE.DoubleSide }), 4),
+      water: offset(new THREE.MeshStandardMaterial({ color: '#2f7f95', roughness: 0.08, metalness: 0.2, envMapIntensity: 1.6, side: THREE.DoubleSide, normalMap: waveNormals(), normalScale: new THREE.Vector2(0.55, 0.55) }), 4),
+      sand: offset(new THREE.MeshStandardMaterial({ map: sandTexture(), roughness: 1, side: THREE.DoubleSide }), -1),
+      surf: offset(new THREE.MeshBasicMaterial({ map: foamTexture(), color: '#ffffff', transparent: true, opacity: 0.5, depthWrite: false, side: THREE.DoubleSide, fog: true }), -3),
       post: new THREE.MeshStandardMaterial({ color: '#8d9095', roughness: 0.6, metalness: 0.4 }),
       lampPost: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.7 }),
       lampHead: new THREE.MeshStandardMaterial({ color: '#d9dde0', emissive: '#ffe7c2', emissiveIntensity: 0, roughness: 0.3 }),
@@ -1355,6 +1523,13 @@ export function MapTiles() {
   useFrame(() => {
     applyWetness(wetting, world.wet);
     mats.lampHead.emissiveIntensity = world.night * 4;
+    // the sea moves, and the surf rolls in
+    const tw = performance.now() / 1000;
+    mats.water.normalMap?.offset.set(tw * 0.012, tw * 0.007);
+    if (mats.surf.map) mats.surf.map.offset.set(tw * 0.04, Math.sin(tw * 0.6) * 0.08);
+    mats.surf.opacity = 0.35 + 0.25 * Math.sin(tw * 1.3);
+    // windows light up after dark
+    mats.walls.emissiveIntensity = world.night * 0.9;
     // shop boards are lit at night
     mats.boards.emissiveIntensity = world.night * 0.45;
     mats.glow.opacity = world.night * 0.55;
