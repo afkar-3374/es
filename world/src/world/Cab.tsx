@@ -22,7 +22,7 @@ const spec = SPECS.car;
 const EYE = new THREE.Vector3(spec.eye[0], spec.eye[1], -spec.eye[2]);
 
 /** Where the route is `s` metres along: position and heading. */
-function along(route: Route, s: number, out: { x: number; z: number; dx: number; dz: number; cls: number }) {
+export function along(route: Route, s: number, out: { x: number; z: number; dx: number; dz: number; cls: number }) {
   const { pts, at } = route;
   s = Math.max(0, Math.min(route.total, s));
   // binary search for the segment

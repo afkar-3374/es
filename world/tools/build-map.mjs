@@ -476,6 +476,53 @@ function heightOf(e) {
   return r < 0.78 ? 3.7 : r < 0.97 ? 6.9 : 10.1;
 }
 
+// Where the roads (and the railway) run: centre points every 2 m with half their width, in
+// a 10 m grid. A building may not stand on one (OpenStreetMap's own buildings only lose to
+// a real road through their middle or a corner well into it; Google's traced ones also to a corner in the carriageway,
+// a path or the railway: they are often a little off, or a lorry or a bus shelter).
+const ROAD_GRID = new Map();
+for (const t of tiles.values())
+  for (const r of t.b) {
+    const [cls, w, bridge] = r;
+    if (bridge) continue;
+    const p = r.slice(3).map((v, k) => v / 10 + (k % 2 ? t.j * TILE : t.i * TILE));
+    for (let k = 2; k < p.length; k += 2) {
+      const [ax, az, bx, bz] = [p[k - 2], p[k - 1], p[k], p[k + 1]];
+      const n = Math.ceil(Math.hypot(bx - ax, bz - az) / 2) + 1;
+      for (let s = 0; s <= n; s++) {
+        const x = ax + ((bx - ax) * s) / n;
+        const z = az + ((bz - az) * s) / n;
+        const key = `${Math.floor(x / 10)}_${Math.floor(z / 10)}`;
+        if (!ROAD_GRID.has(key)) ROAD_GRID.set(key, []);
+        ROAD_GRID.get(key).push([x, z, w / 2, cls]);
+      }
+    }
+  }
+let onRoads = 0;
+function onRoad(ring, strict) {
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const [x, z] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+  for (let i = Math.floor((x0 - 8) / 10); i <= Math.floor((x1 + 8) / 10); i++)
+    for (let j = Math.floor((z0 - 8) / 10); j <= Math.floor((z1 + 8) / 10); j++)
+      for (const [x, z, hw, cls] of ROAD_GRID.get(`${i}_${j}`) ?? []) {
+        if (!strict && cls > 5) continue;
+        if (x > x0 - hw && x < x1 + hw && z > z0 - hw && z < z1 + hw && pointInRing(ring, x, z)) return true;
+        // a corner in the carriageway (OpenStreetMap's own: well into it, on a proper road)
+        const reach = strict ? hw * 0.85 + 0.3 : cls <= 4 ? hw * 0.55 : -1;
+        for (const [px, pz] of ring) if (Math.hypot(px - x, pz - z) < reach) return true;
+      }
+  return false;
+}
+function pointInRing(ring, x, z) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [ax, az] = ring[i];
+    const [bx, bz] = ring[j];
+    if (az > z !== bz > z && x < ((bx - ax) * (z - az)) / (bz - az) + ax) inside = !inside;
+  }
+  return inside;
+}
+
 let nBuildings = 0;
 function addBuilding(e, ringLL) {
   const c = ringLL[0];
@@ -488,6 +535,10 @@ function addBuilding(e, ringLL) {
   if (area(ring) < 0) ring.reverse();
   const A = Math.abs(area(ring));
   if (A < 6) return;
+  if (onRoad(ring, e.id >= 1e12)) {
+    onRoads++;
+    return;
+  }
   const cx = ring.reduce((a, p) => a + p[0], 0) / ring.length;
   const cz = ring.reduce((a, p) => a + p[1], 0) / ring.length;
   const t = tileFor(cx, cz);
@@ -582,7 +633,7 @@ for (const f of fpFiles) {
     addBuilding({ id: fpId++, type: 'way', tags: { building: 'yes', 'building:levels': String(levels) } }, ringLL);
   }
 }
-console.log(`${nBuildings} buildings (${fromOsm} from OpenStreetMap, ${nBuildings - fromOsm} more from Google Open Buildings, ${fpSkipped} already mapped)`);
+console.log(`${nBuildings} buildings (${fromOsm} from OpenStreetMap, ${nBuildings - fromOsm} more from Google Open Buildings, ${fpSkipped} already mapped, ${onRoads} left out: on a road)`);
 
 /* ── Water ────────────────────────────────────────────────────── */
 
@@ -1095,6 +1146,8 @@ writeFileSync(
   join(OUT, 'meta.json'),
   JSON.stringify({
     site: SITE,
+    /** lat/lon → world: east/north metres from `origin` (kx, kz a degree), turned onto the world axes */
+    frame: { origin: ORIGIN.map((v) => Math.round(v * 100) / 100), ax: AX, az: AZ, kx: KX, kz: KZ },
     front: front.name,
     north: NORTH.map((n) => Math.round(n * 1e6) / 1e6),
     tile: TILE,

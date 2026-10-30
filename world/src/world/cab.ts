@@ -219,6 +219,44 @@ export async function findRoute(x0: number, z0: number, x1: number, z1: number):
   return { pts, cls, at, total: at[at.length - 1] };
 }
 
+/**
+ * A drive for traffic: from a junction near (x, z) (within `radius`, at least `min` away),
+ * carrying on along proper roads (no paths), turning at random, for about `length` metres.
+ */
+export async function wanderRoute(x: number, z: number, radius: number, min: number, length: number, rand = Math.random): Promise<Route | null> {
+  const net = await loadNet();
+  const near: number[] = [];
+  for (let i = 0; i < net.vx.length; i++) {
+    const d = Math.hypot(net.vx[i] - x, net.vz[i] - z);
+    if (d < radius && d > min && net.out[i].some(([e]) => net.ec[e] <= 4)) near.push(i);
+  }
+  if (!near.length) return null;
+  let v = near[Math.floor(rand() * near.length)];
+  const pts: [number, number][] = [[net.vx[v], net.vz[v]]];
+  const cls: number[] = [4];
+  let total = 0;
+  let came = -1;
+  while (total < length) {
+    const ways = net.out[v].filter(([e]) => net.ec[e] <= 4 && e !== came);
+    if (!ways.length) break;
+    // bigger roads more often
+    const pick = ways.length === 1 ? ways[0] : ways[Math.floor(rand() * ways.length)];
+    const [e, fwd] = pick;
+    const p = edgePoints(net, e, fwd);
+    for (let k = 1; k < p.length; k++) {
+      total += Math.hypot(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1]);
+      pts.push(p[k]);
+      cls.push(net.ec[e]);
+    }
+    came = e;
+    v = fwd ? net.eb[e] : net.ea[e];
+  }
+  if (pts.length < 2) return null;
+  const at = [0];
+  for (let k = 1; k < pts.length; k++) at.push(at[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
+  return { pts, cls, at, total: at[at.length - 1] };
+}
+
 /* ── The ride ─────────────────────────────────────────────────── */
 
 export type CabStatus = 'idle' | 'finding' | 'coming' | 'riding';

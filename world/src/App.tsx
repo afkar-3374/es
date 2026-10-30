@@ -12,6 +12,7 @@ import { Atmosphere } from './world/Atmosphere';
 import { Rain } from './world/Rain';
 import { Street } from './world/Street';
 import { MapTiles } from './world/MapTiles';
+import { Landmarks } from './world/Landmarks';
 import { Cab } from './world/Cab';
 import { CabUi } from './ui/Cab';
 import { groundAt, inGap, useMeta } from './world/map';
@@ -30,6 +31,7 @@ import { ReadingCorner } from './world/ReadingCorner';
 import { Cafe } from './world/Cafe';
 import { Held } from './world/Held';
 import { Vehicles } from './world/Vehicles';
+import { Traffic } from './world/Traffic';
 import { music } from './audio/music';
 import { Interactor } from './world/Interactor';
 import { requestUse } from './world/interact';
@@ -139,6 +141,7 @@ export default function App() {
           <Physics gravity={[0, -9.81, 0]}>
             <Street />
             {!OFF.has('map') && <MapTiles />}
+            {!OFF.has('map') && <Landmarks />}
             <Neighbours />
             <Merged>
               <Building />
@@ -153,6 +156,7 @@ export default function App() {
               </Merged>
             </NearBuilding>
             {!OFF.has('vehicles') && <Vehicles />}
+            {entered && !OFF.has('traffic') && <Traffic />}
             {entered && <Peers />}
             {entered && <Cab />}
             <Player start={START} startYaw={START_YAW} startPitch={START_PITCH} />

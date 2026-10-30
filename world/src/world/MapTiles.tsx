@@ -11,6 +11,7 @@ import { world } from './state';
 import { Lamp, VirtualLight } from './Lamps';
 import { Palms, type PalmSpot } from './Palms';
 import { rng } from './layout';
+import { inLandmark } from './Landmarks';
 import { boxDistance, cellsPerTile, forgetTilesFarFrom, getMeta, COVER, hasTile, isWater, loadedTile, loadMeta, loadTile, onMapChange, RAIL, tileCover, tileGround, tileKey, waterRects, type Tile } from './map';
 
 /*
@@ -64,8 +65,12 @@ class Mesh {
   }
 }
 
-/** A flat strip along a line (x, z pairs), `w` wide and `shift` to its left, at height y; UVs in metres / tile. */
-function strip(m: Mesh, pts: number[], w: number, y: number, c: THREE.Color, tile: number, shift = 0, hs?: number[]) {
+/**
+ * A flat strip along a line (x, z pairs), `w` wide and `shift` to its left, at height y; UVs in
+ * metres / tile. Raised by `hs` at each point, or (with `ground`) lying on the ground at every
+ * corner, so on a slope its uphill edge isn't buried.
+ */
+function strip(m: Mesh, pts: number[], w: number, y: number, c: THREE.Color, tile: number, shift = 0, hs?: number[], ground?: (x: number, z: number) => number) {
   const n = pts.length / 2;
   if (n < 2) return;
   const L: [number, number][] = [];
@@ -116,12 +121,12 @@ function strip(m: Mesh, pts: number[], w: number, y: number, c: THREE.Color, til
     ] as const;
     const y0 = y + (hs ? hs[i] : 0);
     const y1 = y + (hs ? hs[i + 1] : 0);
-    for (const [[x, z], u, v] of q) m.vert(x, v === v0 ? y0 : y1, z, 0, 1, 0, u, v, c);
+    for (const [[x, z], u, v] of q) m.vert(x, ground ? y + ground(x, z) : v === v0 ? y0 : y1, z, 0, 1, 0, u, v, c);
   }
 }
 
 /** Short dashes along the middle of a line (at the line's heights, if it has them). */
-function dashes(m: Mesh, pts: number[], y: number, c: THREE.Color, hs?: number[]) {
+function dashes(m: Mesh, pts: number[], y: number, c: THREE.Color, hs?: number[], ground?: (x: number, z: number) => number) {
   let phase = 0;
   for (let i = 2; i < pts.length; i += 2) {
     const ax = pts[i - 2];
@@ -133,7 +138,7 @@ function dashes(m: Mesh, pts: number[], y: number, c: THREE.Color, hs?: number[]
       const e = Math.min(s + 3, len);
       const h0 = hs ? hs[i / 2 - 1] + ((hs[i / 2] - hs[i / 2 - 1]) * s) / len : 0;
       const h1 = hs ? hs[i / 2 - 1] + ((hs[i / 2] - hs[i / 2 - 1]) * e) / len : 0;
-      strip(m, [ax + (dx * s) / len, az + (dz * s) / len, ax + (dx * e) / len, az + (dz * e) / len], 0.12, y, c, 1, 0, [h0, h1]);
+      strip(m, [ax + (dx * s) / len, az + (dz * s) / len, ax + (dx * e) / len, az + (dz * e) / len], 0.12, y, c, 1, 0, [h0, h1], ground);
     }
     phase = (((phase - len) % 9) + 9) % 9;
   }
@@ -166,26 +171,32 @@ function buildTile(t: Tile) {
   for (const r of t.data.b) {
     const [cls, w, bridge] = r;
     // every 12 m, so the road follows the lie of the land; a bridge runs level from end to end
-    const pts = densify(r.slice(3).map((v, k) => v / 10 + (k % 2 ? oz : ox)), 12);
+    const pts = densify(r.slice(3).map((v, k) => v / 10 + (k % 2 ? oz : ox)), 6);
     const hs = roadHeights(pts, bridge === 1, G);
+    // on the ground (a little proud of it, for the creases between its height points); a bridge runs level
+    const on = bridge === 1 ? undefined : (x: number, z: number) => G(x, z) + 0.05;
     if (cls <= 4) streetLamps(pts, w, cls, posts, heads, glows, lamps, onRoad, G);
     if (cls === RAIL) {
-      strip(ground, pts, w, ROAD_Y[cls], c.set('#7d7368'), 2, 0, hs);
-      for (const side of [-0.75, 0.75]) strip(paint, pts, 0.08, ROAD_Y[cls] + 0.002, c.set('#4a4a4f'), 1, side, hs);
+      // ballast, sleepers across it, and two steel rails
+      strip(ground, pts, 3.4, ROAD_Y[cls], c.set('#857c72'), 2, 0, hs, on);
+      sleepers(paint, pts, ROAD_Y[cls] + 0.012, c.set('#4e3b2c'), hs, on);
+      for (const side of [-0.76, 0.76]) strip(paint, pts, 0.09, ROAD_Y[cls] + 0.06, c.set('#a4a9ae'), 1, side, hs, on);
       continue;
     }
     if (cls >= 6) {
-      strip(ground, pts, w, ROAD_Y[cls], c.set(cls === 6 ? '#a8673f' : '#b9b4aa'), 2, 0, hs);
+      strip(ground, pts, w, ROAD_Y[cls], c.set(cls === 6 ? '#a8673f' : '#b9b4aa'), 2, 0, hs, on);
       continue;
     }
-    strip(asphalt, pts, w, ROAD_Y[cls], c.set('#ffffff'), 6, 0, hs);
-    if (cls <= 3) dashes(paint, pts, ROAD_Y[cls] + 0.004, white, hs);
+    strip(asphalt, pts, w, ROAD_Y[cls], c.set('#ffffff'), 6, 0, hs, on);
+    if (cls <= 3) dashes(paint, pts, ROAD_Y[cls] + 0.004, white, hs, on && ((x, z) => on(x, z) + 0.01));
   }
 
   t.data.h.forEach((b, n) => {
     const [h, seed] = b;
     const ring: [number, number][] = [];
     for (let k = 2; k + 1 < b.length; k += 2) ring.push([b[k] / 10 + ox, b[k + 1] / 10 + oz]);
+    // a landmark is modelled properly instead
+    if (inLandmark(ring.reduce((s, p) => s + p[0], 0) / ring.length, ring.reduce((s, p) => s + p[1], 0) / ring.length)) return;
     let A = 0;
     for (let k = 0; k < ring.length; k++) {
       const [x0, z0] = ring[k];
@@ -405,6 +416,28 @@ function facadeTexture() {
   return t;
 }
 
+/** Railway sleepers: short bars across the line every 0.7 m. */
+function sleepers(m: Mesh, pts: number[], y: number, c: THREE.Color, hs?: number[], ground?: (x: number, z: number) => number) {
+  let phase = 0;
+  for (let i = 2; i < pts.length; i += 2) {
+    const ax = pts[i - 2];
+    const az = pts[i - 1];
+    const dx = pts[i] - ax;
+    const dz = pts[i + 1] - az;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.01) continue;
+    const ux = dx / len;
+    const uz = dz / len;
+    for (let s = phase; s < len; s += 0.7) {
+      const x = ax + ux * s;
+      const z = az + uz * s;
+      const h = hs ? hs[i / 2 - 1] + ((hs[i / 2] - hs[i / 2 - 1]) * s) / len : 0;
+      strip(m, [x + uz * 1.3, z - ux * 1.3, x - uz * 1.3, z + ux * 1.3], 0.24, y, c, 1, 0, [h, h], ground);
+    }
+    phase = (((phase - len) % 0.7) + 0.7) % 0.7;
+  }
+}
+
 /** A line (x, z pairs) with extra points so no stretch is longer than `step` metres. */
 function densify(pts: number[], step: number) {
   const out = [pts[0], pts[1]];
@@ -619,7 +652,7 @@ function scatterPalms(t: Tile): { palms: PalmSpot[]; trees: PalmSpot[] } {
       const grove = (Math.sin(x / 83) + Math.sin(z / 61 + x / 140) + 2) / 4;
       const density = t.cover ? (TREES[kind] ?? 0) : grove * grove * 0.75;
       if (rand() > density) continue;
-      if (x >= ox + size || z >= oz + size || inSite(x, z) || isWater(x, z)) continue;
+      if (x >= ox + size || z >= oz + size || inSite(x, z) || isWater(x, z) || inLandmark(x, z)) continue;
       const cell = Math.floor((z - oz) / CELL) * N + Math.floor((x - ox) / CELL);
       if (onRoad(x, z)) continue;
       const inBuilding = boxesIn[cell].some(([bx, bz, hx, hz, ang]) => {
@@ -839,6 +872,7 @@ function useTileColliders(t: Tile) {
       q.setFromAxisAngle(up, -ang);
       const x = cx / 10 + ox;
       const z = cz / 10 + oz;
+      if (inLandmark(x, z)) continue;
       // standing on its lowest corner, as it's drawn
       const r = Math.hypot(hx, hz) / 10;
       const base = Math.min(tileGround(t, x - r, z - r), tileGround(t, x + r, z - r), tileGround(t, x - r, z + r), tileGround(t, x + r, z + r), tileGround(t, x, z));

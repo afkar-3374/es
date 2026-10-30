@@ -19,6 +19,8 @@ export interface Place {
 
 export interface Meta {
   site: { lat: number; lon: number };
+  /** lat/lon → world: east/south metres (kx, kz a degree) from `origin`, onto the world's x and z axes */
+  frame?: { origin: [number, number]; ax: [number, number]; az: [number, number]; kx: number; kz: number };
   front: string;
   /** which way north is, as an x/z direction */
   north: [number, number];
