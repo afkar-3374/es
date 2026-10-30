@@ -8,3 +8,10 @@ export const REALTIME_KEY = 'sb_publishable_PfGr2cdE5450n3domALrSA_A2as6Wdy';
 // ?room=name (previews and tests) uses a separate channel so test visitors don't appear in town
 const room = new URLSearchParams(location.search).get('room')?.replace(/[^a-z0-9-]/gi, '').slice(0, 24);
 export const CHANNEL = room ? `es-world:test-${room}` : 'es-world:town';
+
+/*
+ * Google Map Tiles API key for the "Real world" view (Photorealistic 3D Tiles). A browser
+ * key is public by design: it must be restricted in Google Cloud to this site's address
+ * (HTTP referrers) and to the Map Tiles API only. Empty: the view isn't offered.
+ */
+export const GOOGLE_TILES_KEY = '';

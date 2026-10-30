@@ -13,6 +13,9 @@ import { Rain } from './world/Rain';
 import { Street } from './world/Street';
 import { MapTiles } from './world/MapTiles';
 import { Landmarks } from './world/Landmarks';
+import { GoogleTiles } from './world/GoogleTiles';
+import { BusStops } from './world/BusStops';
+import { useReal } from './world/real';
 import { Cab } from './world/Cab';
 import { CabUi } from './ui/Cab';
 import { groundAt, inGap, useMeta } from './world/map';
@@ -98,6 +101,7 @@ export default function App() {
   const [entered, setEntered] = useState(false);
   const book = useUiValue((s) => s.book);
   const gfx = useQuality();
+  const realView = useReal();
   // no palm in the middle of a side road
   const gaps = useMeta()?.gaps;
   const palms = useMemo(() => PALMS.filter((p) => !inGap(gaps, p.z < 10 ? 'n' : 's', p.x - 1, p.x + 1)), [gaps]);
@@ -154,6 +158,8 @@ export default function App() {
             <Street />
             {!OFF.has('map') && <MapTiles />}
             {!OFF.has('map') && <Landmarks />}
+            {realView && <GoogleTiles />}
+            {!OFF.has('map') && <BusStops />}
             <Neighbours />
             <Merged>
               <Building />

@@ -5,7 +5,7 @@ import { CuboidCollider, RigidBody, type RapierRigidBody } from '@react-three/ra
 import { VehicleModel, SPECS, type VehicleKind } from './vehicleModels';
 import { wanderRoute, ROAD_SPEED, type Route } from './cab';
 import { along } from './Cab';
-import { groundAt } from './map';
+import { getMeta, groundAt } from './map';
 import { world } from './state';
 import { useQuality } from './quality';
 import { Rider } from './Vehicles';
@@ -36,6 +36,38 @@ interface Driver {
   dx: number;
   dz: number;
   yaw: number;
+  /** buses: where along the route the stops are, the next one, and how long it's been waiting */
+  stops: number[];
+  next: number;
+  wait: number;
+}
+
+/** Bus stops beside this route (metres along it). */
+function stopsOn(route: Route) {
+  const all = getMeta()?.busStops ?? [];
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const [x, z] of route.pts) {
+    x0 = Math.min(x0, x);
+    x1 = Math.max(x1, x);
+    z0 = Math.min(z0, z);
+    z1 = Math.max(z1, z);
+  }
+  const out: number[] = [];
+  for (const [sx, sz] of all) {
+    if (sx < x0 - 20 || sx > x1 + 20 || sz < z0 - 20 || sz > z1 + 20) continue;
+    let best = Infinity;
+    let at = 0;
+    for (let k = 0; k < route.pts.length; k++) {
+      const d = Math.hypot(route.pts[k][0] - sx, route.pts[k][1] - sz);
+      if (d < best) {
+        best = d;
+        at = route.at[k];
+      }
+    }
+    // on this side of the road (a bus keeps left: the stop is on its left)
+    if (best < 16) out.push(at);
+  }
+  return out.sort((a, b) => a - b);
 }
 
 /** Everyone driving now (to keep a distance from the one ahead). */
@@ -62,7 +94,7 @@ function Vehicle({ seed }: { seed: number }) {
     wanderRoute(p.x, p.z, SPAWN[1], SPAWN[0], 900).then((route) => {
       busy.current = false;
       if (!route) return;
-      const next: Driver = { kind, route, done: 0, speed: 6, x: route.pts[0][0], z: route.pts[0][1], dx: 1, dz: 0, yaw: 0 };
+      const next: Driver = { kind, stops: kind === 'bus' ? stopsOn(route) : [], next: 0, wait: 0, route, done: 0, speed: 6, x: route.pts[0][0], z: route.pts[0][1], dx: 1, dz: 0, yaw: 0 };
       along(route, 0, here);
       next.yaw = Math.atan2(-here.dz, here.dx);
       setD(next);
@@ -107,6 +139,20 @@ function Vehicle({ seed }: { seed: number }) {
     const v = world.vehicle;
     if (v && !(v.x === 0 && v.z === 0)) block(v.x, v.z, 2.8);
     for (const o of drivers) if (o !== d) block(o.x, o.z, 2.2);
+    // buses pull in at each stop for a few seconds
+    while (d.next < d.stops.length && d.stops[d.next] < d.done - 3) d.next++;
+    if (d.next < d.stops.length) {
+      const to = d.stops[d.next] - d.done;
+      if (to < 30) target = Math.min(target, Math.max(0, to * 0.45));
+      if (to < 1.5 && d.speed < 0.6) {
+        d.wait += dt;
+        target = 0;
+        if (d.wait > 7) {
+          d.wait = 0;
+          d.next++;
+        }
+      }
+    }
     d.speed += Math.max(-6 * dt, Math.min(2.4 * dt, target - d.speed));
     d.done += Math.max(0, d.speed) * dt;
     along(d.route, d.done, here);

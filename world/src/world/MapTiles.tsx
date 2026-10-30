@@ -12,6 +12,7 @@ import { Lamp, VirtualLight } from './Lamps';
 import { Palms, type PalmSpot } from './Palms';
 import { rng } from './layout';
 import { inLandmark } from './Landmarks';
+import { useReal } from './real';
 import { boxDistance, cellsPerTile, forgetTilesFarFrom, getMeta, COVER, hasTile, isWater, loadedTile, loadMeta, loadTile, onMapChange, RAIL, tileCover, tileGround, tileKey, waterRects, type Tile } from './map';
 
 /*
@@ -163,7 +164,11 @@ function buildTile(t: Tile) {
   const posts = new Mesh();
   const heads = new Mesh();
   const glows = new Mesh();
+  const boards = new Mesh();
+  const wires: number[] = [];
   const lamps: [number, number, number][] = [];
+  // a shop's front faces a proper road (not a path)
+  const facesRoad = roadTester(t, 1, 5);
   const G = (x: number, z: number) => tileGround(t, x, z);
   // (a lamp post never stands in another road)
   const onRoad = roadTester(t, 0.5);
@@ -176,6 +181,7 @@ function buildTile(t: Tile) {
     // on the ground (a little proud of it, for the creases between its height points); a bridge runs level
     const on = bridge === 1 ? undefined : (x: number, z: number) => G(x, z) + 0.05;
     if (cls <= 4) streetLamps(pts, w, cls, posts, heads, glows, lamps, onRoad, G);
+    if (cls >= 2 && cls <= 4 && !bridge) electricity(pts, w, plain, wires, onRoad, G);
     if (cls === RAIL) {
       // ballast, sleepers across it, and two steel rails
       strip(ground, pts, 3.4, ROAD_Y[cls], c.set('#857c72'), 2, 0, hs, on);
@@ -246,6 +252,55 @@ function buildTile(t: Tile) {
       }
       u += len;
     }
+    // a shop on the ground floor, on the side facing the road
+    if (h >= 3.5 && seed % 4 !== 0) {
+      for (let k = 0; k < ring.length; k++) {
+        const [x0, z0] = ring[k];
+        const [x1, z1] = ring[(k + 1) % ring.length];
+        const len = Math.hypot(x1 - x0, z1 - z0);
+        if (len < 3.2) continue;
+        const s = A > 0 ? 1 : -1;
+        const nx = (s * (z1 - z0)) / len;
+        const nz = (-s * (x1 - x0)) / len;
+        const mx = (x0 + x1) / 2;
+        const mz = (z0 + z1) / 2;
+        if (!facesRoad(mx + nx * 6, mz + nz * 6) || facesRoad(mx + nx * 0.5, mz + nz * 0.5)) continue;
+        // up to 9 m of it, in the middle
+        const part = Math.min(1, 9 / len);
+        const t0 = (1 - part) / 2;
+        const ax = x0 + (x1 - x0) * t0 + nx * 0.07;
+        const az = z0 + (z1 - z0) * t0 + nz * 0.07;
+        const bx = x0 + (x1 - x0) * (1 - t0) + nx * 0.07;
+        const bz = z0 + (z1 - z0) * (1 - t0) + nz * 0.07;
+        const cell = (seed * 7 + n) % (SHOP_COLS * SHOP_ROWS);
+        const u0 = (cell % SHOP_COLS) / SHOP_COLS;
+        const u1 = u0 + 1 / SHOP_COLS;
+        const v1 = 1 - Math.floor(cell / SHOP_COLS) / SHOP_ROWS;
+        const v0 = v1 - 1 / SHOP_ROWS;
+        // (which way round the board reads depends on the outline's direction)
+        const [ua, ub] = s > 0 ? [u1, u0] : [u0, u1];
+        const y0 = base + 2.75;
+        const y1 = base + 3.55;
+        boards.vert(ax, y0, az, nx, 0, nz, ua, v0, white1);
+        boards.vert(bx, y0, bz, nx, 0, nz, ub, v0, white1);
+        boards.vert(bx, y1, bz, nx, 0, nz, ub, v1, white1);
+        boards.vert(ax, y0, az, nx, 0, nz, ua, v0, white1);
+        boards.vert(bx, y1, bz, nx, 0, nz, ub, v1, white1);
+        boards.vert(ax, y1, az, nx, 0, nz, ua, v1, white1);
+        // the open shop front below it
+        const q = [
+          [ax, base + 0.15, az],
+          [bx, base + 0.15, bz],
+          [bx, base + 2.65, bz],
+          [ax, base + 0.15, az],
+          [bx, base + 2.65, bz],
+          [ax, base + 2.65, az],
+        ];
+        // open, or its shutter down
+        for (const [x, y, z] of q) plain.vert(x, y, z, nx, 0, nz, 0, 0, seed % 3 ? SHOP_OPEN : SHOP_SHUTTER);
+        break;
+      }
+    }
     if (house) {
       hipRoof(tiled, box, ox, oz, top, c.set(TILE_RED[seed % TILE_RED.length]));
       return;
@@ -301,6 +356,8 @@ function buildTile(t: Tile) {
     posts: posts.geometry(),
     heads: heads.geometry(),
     glows: glows.geometry(),
+    boards: boards.geometry(),
+    wires: wires.length ? new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(wires, 3)) : null,
     lamps,
   };
 }
@@ -576,8 +633,115 @@ function streetLamps(pts: number[], w: number, cls: number, posts: Mesh, heads: 
 }
 const white1 = new THREE.Color('#ffffff');
 
+// KSEB electricity poles: concrete, a cross-arm with three insulators, wires sagging between
+const ELEC_POLE = mergeGeometries([
+  new THREE.BoxGeometry(0.2, 8.4, 0.2).translate(0, 4.2, 0),
+  new THREE.BoxGeometry(0.1, 0.1, 1.5).translate(0, 7.7, 0),
+  ...[-0.6, 0, 0.6].map((z) => new THREE.CylinderGeometry(0.04, 0.05, 0.16, 6).translate(0, 7.83, z)),
+]);
+const CONCRETE = new THREE.Color('#a9a59c');
+
+/** Poles along one side of a road (opposite its lamps), every ~34 m, and the wires between them. */
+function electricity(pts: number[], w: number, poles: Mesh, wires: number[], onRoad: (x: number, z: number) => boolean, G: (x: number, z: number) => number) {
+  const every = 34;
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const up = new THREE.Vector3(0, 1, 0);
+  let next = every * 0.3;
+  let walked = 0;
+  let prev: THREE.Vector3[] | null = null;
+  for (let i = 2; i < pts.length; i += 2) {
+    const ax = pts[i - 2];
+    const az = pts[i - 1];
+    const dx = pts[i] - ax;
+    const dz = pts[i + 1] - az;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.01) continue;
+    while (next <= walked + len) {
+      const f = (next - walked) / len;
+      next += every;
+      // the right of the direction of travel (lamps are on the left)
+      const nx = -dz / len;
+      const nz = dx / len;
+      const px = ax + dx * f + nx * (w / 2 + 1.3);
+      const pz = az + dz * f + nz * (w / 2 + 1.3);
+      if (inSite(px, pz) || onRoad(px, pz) || inLandmark(px, pz)) {
+        prev = null;
+        continue;
+      }
+      // the cross-arm runs across the road
+      q.setFromAxisAngle(up, Math.atan2(-dz, dx));
+      const gy = G(px, pz);
+      m.compose(new THREE.Vector3(px, gy, pz), q, new THREE.Vector3(1, 1, 1));
+      poles.add(ELEC_POLE, m, CONCRETE);
+      const tops = [-0.6, 0, 0.6].map((s) => new THREE.Vector3(px + nx * s, gy + 7.9, pz + nz * s));
+      if (prev) {
+        // each wire sags a little between the poles (a few straight pieces)
+        for (let k = 0; k < 3; k++) {
+          const a = prev[k];
+          const b = tops[k];
+          const span = a.distanceTo(b);
+          if (span > every * 2.2 || Math.abs(a.y - b.y) > 5) continue;
+          let last = a;
+          for (let sgi = 1; sgi <= 6; sgi++) {
+            const t = sgi / 6;
+            const p = a.clone().lerp(b, t);
+            p.y -= 4 * t * (1 - t) * span * 0.018;
+            wires.push(last.x, last.y, last.z, p.x, p.y, p.z);
+            last = p;
+          }
+        }
+      }
+      prev = tops;
+    }
+    walked += len;
+  }
+}
+
+/* Shops: most buildings facing a proper road have a shop on the ground floor, with its board. */
+const SHOP_KINDS = ['SUPERMARKET', 'BAKERY', 'TEXTILES', 'MEDICALS', 'HOTEL', 'MOBILES', 'HARDWARES', 'STORES', 'FANCY', 'JEWELLERY', 'OPTICALS', 'TAILORS', 'TEA STALL', 'FOOTWEAR', 'ELECTRICALS', 'BOOK STALL'];
+const SHOP_ML = ['സൂപ്പർമാർക്കറ്റ്', 'ബേക്കറി', 'ടെക്സ്റ്റൈൽസ്', 'മെഡിക്കൽസ്', 'ഹോട്ടൽ', 'മൊബൈൽസ്', 'ഹാർഡ്‌വെയേഴ്സ്', 'സ്റ്റോഴ്സ്', 'ഫാൻസി', 'ജ്വല്ലറി', 'ഒപ്റ്റിക്കൽസ്', 'ടെയ്‌ലേഴ്സ്', 'ചായക്കട', 'ഫുട്‌വെയർ', 'ഇലക്ട്രിക്കൽസ്', 'ബുക്ക് സ്റ്റാൾ'];
+const SHOP_NAMES = ['NEW', 'SREE', 'AL', 'CITY', 'MALABAR', 'STAR', 'ROYAL', 'GREEN', 'KASARAGOD', 'CHANDRAGIRI', 'BEKAL', 'FRIENDS'];
+const SHOP_COLS = 8;
+const SHOP_ROWS = 16;
+let shopAtlas: THREE.Texture | null = null;
+function shopBoards() {
+  if (shopAtlas) return shopAtlas;
+  const W = 256;
+  const H = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = W * SHOP_COLS;
+  canvas.height = H * SHOP_ROWS;
+  const g = canvas.getContext('2d')!;
+  const bg = ['#c62828', '#1565c0', '#2e7d32', '#f9a825', '#ffffff', '#6a1b9a', '#ef6c00', '#00838f'];
+  for (let i = 0; i < SHOP_COLS * SHOP_ROWS; i++) {
+    const x = (i % SHOP_COLS) * W;
+    const y = Math.floor(i / SHOP_COLS) * H;
+    const b = bg[(i * 5) % bg.length];
+    g.fillStyle = b;
+    g.fillRect(x, y, W, H);
+    g.fillStyle = b === '#ffffff' || b === '#f9a825' ? '#b71c1c' : '#ffffff';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    const kind = i % SHOP_KINDS.length;
+    const name = `${SHOP_NAMES[Math.floor(i / SHOP_KINDS.length) % SHOP_NAMES.length]} ${SHOP_KINDS[kind]}`;
+    let size = 30;
+    g.font = `900 ${size}px Arial, sans-serif`;
+    while (g.measureText(name).width > W - 16 && size > 12) g.font = `900 ${(size -= 2)}px Arial, sans-serif`;
+    g.fillText(name, x + W / 2, y + 22);
+    g.font = '700 17px sans-serif';
+    g.fillText(SHOP_ML[kind], x + W / 2, y + 48);
+  }
+  shopAtlas = new THREE.CanvasTexture(canvas);
+  shopAtlas.colorSpace = THREE.SRGBColorSpace;
+  shopAtlas.anisotropy = 8;
+  return shopAtlas;
+}
+const SHOP_OPEN = new THREE.Color('#75614f');
+const SHOP_SHUTTER = new THREE.Color('#8e9194');
+
 /** A quick test for "is (x, z) on any of this tile's roads (with `pad` metres to spare)?" */
-function roadTester(t: Tile, pad: number) {
+function roadTester(t: Tile, pad: number, maxClass = 99) {
   const size = getMeta()!.tile;
   const ox = t.i * size;
   const oz = t.j * size;
@@ -585,6 +749,7 @@ function roadTester(t: Tile, pad: number) {
   const N = size / CELL;
   const cells: number[][][] = Array.from({ length: N * N }, () => []);
   for (const r of t.data.b) {
+    if (r[0] > maxClass) continue;
     const reach = r[1] / 2 + pad;
     for (let k = 5; k + 1 < r.length; k += 2) {
       const ax = r[k - 2] / 10 + ox;
@@ -940,6 +1105,8 @@ interface Mats {
   lampPost: THREE.MeshStandardMaterial;
   lampHead: THREE.MeshStandardMaterial;
   glow: THREE.MeshBasicMaterial;
+  boards: THREE.MeshStandardMaterial;
+  wire: THREE.LineBasicMaterial;
 }
 
 function TileView({ tile, mats, near }: { tile: Tile; mats: Mats; near: boolean }) {
@@ -983,6 +1150,8 @@ function TileView({ tile, mats, near }: { tile: Tile; mats: Mats; near: boolean 
       {built.posts && <mesh geometry={built.posts} material={mats.lampPost} castShadow={near} raycast={noRaycast} />}
       {built.heads && <mesh geometry={built.heads} material={mats.lampHead} raycast={noRaycast} />}
       {built.glows && <mesh geometry={built.glows} material={mats.glow} renderOrder={1} raycast={noRaycast} />}
+      {built.boards && <mesh geometry={built.boards} material={mats.boards} receiveShadow raycast={noRaycast} />}
+      {built.wires && <lineSegments geometry={built.wires} material={mats.wire} raycast={noRaycast} />}
       {near && built.lamps.length > 0 && <TileLamps at={built.lamps} />}
       {greenery.palms.length > 0 && <Palms spots={greenery.palms} />}
       {greenery.trees.length > 0 && <LeafyTrees spots={greenery.trees} />}
@@ -1160,6 +1329,8 @@ export function MapTiles() {
       post: new THREE.MeshStandardMaterial({ color: '#8d9095', roughness: 0.6, metalness: 0.4 }),
       lampPost: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.7 }),
       lampHead: new THREE.MeshStandardMaterial({ color: '#d9dde0', emissive: '#ffe7c2', emissiveIntensity: 0, roughness: 0.3 }),
+      boards: new THREE.MeshStandardMaterial({ map: shopBoards(), side: THREE.DoubleSide, roughness: 0.55, emissive: '#ffffff', emissiveMap: shopBoards(), emissiveIntensity: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }),
+      wire: new THREE.LineBasicMaterial({ color: '#26282b' }),
       // a warm pool of light on the road under each lamp, at night
       glow: offset(
         new THREE.MeshBasicMaterial({
@@ -1179,6 +1350,8 @@ export function MapTiles() {
   useFrame(() => {
     applyWetness(wetting, world.wet);
     mats.lampHead.emissiveIntensity = world.night * 4;
+    // shop boards are lit at night
+    mats.boards.emissiveIntensity = world.night * 0.45;
     mats.glow.opacity = world.night * 0.55;
     mats.glow.visible = world.night > 0.02;
   });
@@ -1225,8 +1398,10 @@ export function MapTiles() {
   // the tile you're on comes first (keeps it loading first too)
   useEffect(() => void loadTile(tileKey(world.player.x, world.player.z)), []);
 
+  // Google's real-world view draws the land instead (what's solid stays)
+  const real = useReal();
   return (
-    <group>
+    <group visible={!real}>
       <Ground mat={grass} />
       <FarLand />
       <Bounds />

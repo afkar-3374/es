@@ -15,6 +15,7 @@ import { cab, nearestRoad, useCab } from '../world/cab';
 import { getMeta, groundAt } from '../world/map';
 import { world } from '../world/state';
 import * as THREE from 'three';
+import { real, useReal } from '../world/real';
 
 /** The name of the place you're in (the nearest town, village or suburb), as you go. */
 function usePlace() {
@@ -106,6 +107,7 @@ export function Hud({ c }: { c: Conditions }) {
 
   const here = roster.length + 1;
   const place = usePlace();
+  const realOn = useReal();
   return (
     <div className="hud">
       <div className="hud-left">
@@ -160,6 +162,19 @@ export function Hud({ c }: { c: Conditions }) {
                 ))}
               </div>
             </div>
+            {real.available && (
+              <div className="hud-menu-row">
+                <span>🌍 World</span>
+                <div className="seg" role="radiogroup" aria-label="How the world looks">
+                  <button type="button" role="radio" aria-checked={!realOn} className={!realOn ? 'on' : ''} onClick={() => real.set(false)}>
+                    Our town
+                  </button>
+                  <button type="button" role="radio" aria-checked={realOn} className={realOn ? 'on' : ''} onClick={() => real.set(true)}>
+                    Real (Google 3D)
+                  </button>
+                </div>
+              </div>
+            )}
             <button
               type="button"
               className="hud-menu-item"

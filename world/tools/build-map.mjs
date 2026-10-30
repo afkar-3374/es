@@ -980,6 +980,54 @@ for (const w of carRoads) {
 }
 
 // where cabs can take you
+// bus stops (<cache>/busstops.json: an Overpass download of highway=bus_stop and friends),
+// each turned to face its road: [x, z, road direction (mrad), name or ""]
+let busStops = [];
+try {
+  const raw = JSON.parse(readFileSync(join(CACHE, 'busstops.json'), 'utf8')).elements;
+  const seenStop = new Set();
+  for (const e of raw) {
+    if (!inDistrict(e.lat, e.lon)) continue;
+    const [x, z] = W(e);
+    const key = `${Math.round(x / 8)}_${Math.round(z / 8)}`;
+    if (seenStop.has(key)) continue;
+    seenStop.add(key);
+    // the nearest road: which way it runs, and stand just off its edge
+    let best = null;
+    let bd = 30;
+    for (let i = Math.floor((x - 30) / 10); i <= Math.floor((x + 30) / 10); i++)
+      for (let j = Math.floor((z - 30) / 10); j <= Math.floor((z + 30) / 10); j++)
+        for (const q of ROAD_GRID.get(`${i}_${j}`) ?? []) {
+          if (q[3] > 4) continue;
+          const d = Math.hypot(q[0] - x, q[1] - z);
+          if (d < bd) { bd = d; best = q; }
+        }
+    if (!best) continue;
+    // the road's direction from its neighbouring samples
+    let ang = 0;
+    {
+      let ax = 0, az = 0;
+      for (let i = Math.floor((best[0] - 4) / 10); i <= Math.floor((best[0] + 4) / 10); i++)
+        for (let j = Math.floor((best[1] - 4) / 10); j <= Math.floor((best[1] + 4) / 10); j++)
+          for (const q of ROAD_GRID.get(`${i}_${j}`) ?? []) {
+            const dx = q[0] - best[0];
+            const dz = q[1] - best[1];
+            const d = Math.hypot(dx, dz);
+            if (d > 1 && d < 4.5) { const sgn = ax * dx + az * dz < 0 ? -1 : 1; ax += sgn * dx / d; az += sgn * dz / d; }
+          }
+      ang = Math.atan2(az, ax);
+    }
+    // on the stop's side of the road, its edge plus a metre and a half
+    const nx = -Math.sin(ang), nz = Math.cos(ang);
+    const side = (x - best[0]) * nx + (z - best[1]) * nz >= 0 ? 1 : -1;
+    const off = best[2] + 1.6;
+    busStops.push([Math.round((best[0] + nx * side * off) * 10) / 10, Math.round((best[1] + nz * side * off) * 10) / 10, Math.round((side > 0 ? ang : ang + Math.PI) * 1000), e.tags?.name ?? '']);
+  }
+} catch {
+  /* no bus stops downloaded */
+}
+console.log(`${busStops.length} bus stops`);
+
 const destinations = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'destinations.json'), 'utf8')).map((d) => {
   if (d.home) return { n: d.n, e: d.e, x: 0, z: 12, home: 1 };
   const [x, z] = W(d);
@@ -1164,6 +1212,8 @@ writeFileSync(
     places,
     gaps: mergedGaps,
     destinations,
+    /** bus stops: [x, z, road direction (mrad, the shelter's back to the road's left), name] */
+    busStops,
   })
 );
 console.log(`overview ${IW}×${IH}; done`);

@@ -13,6 +13,7 @@
     "@react-three/fiber": "^8.17.10",
     "@react-three/rapier": "^1.4.0",
     "@supabase/realtime-js": "^2.118.0",
+    "3d-tiles-renderer": "^0.5.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "suncalc": "^1.9.0",

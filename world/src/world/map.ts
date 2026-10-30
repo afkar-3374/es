@@ -37,6 +37,8 @@ export interface Meta {
   /** the whole district's ground, coarse (metres; over the overview image's area) */
   far?: { x0: number; z0: number; step: number; nx: number; nz: number; g: string } | null;
   places: Place[];
+  /** bus stops: [x, z, the road's direction (mrad; the shelter stands on its left), name] */
+  busStops?: [number, number, number, string][];
   /** where real roads join the modelled street: shops and footpaths leave these open */
   gaps?: Gap[];
 }

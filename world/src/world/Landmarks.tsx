@@ -7,6 +7,7 @@ import { applyWetness, canvasTexture, usePBR } from './materials';
 import { noRaycast } from './merge';
 import { world } from './state';
 import { getMeta, hasTile, loadTile, tileGround, useMeta, type Meta, type Tile } from './map';
+import { useReal } from './real';
 import { bastion, hash, inRing, Kit, keralaBuilding, offsetRing, simplify, wallLine, type MatKey, type SignSpec, type Solid, type V2 } from './Kit';
 
 /*
@@ -557,8 +558,9 @@ export function Landmarks() {
     const next = all.filter((p) => x > p.box[0] - SHOW && x < p.box[2] + SHOW && z > p.box[1] - SHOW && z < p.box[3] + SHOW).map((p) => p.def.id);
     if (next.join() !== shown.join()) setShown(next);
   });
+  const real = useReal();
   return (
-    <group>
+    <group visible={!real}>
       {all
         .filter((p) => shown.includes(p.def.id))
         .map((p) => (
