@@ -9,6 +9,7 @@ import { getMeta, groundAt } from './map';
 import { world } from './state';
 import { useQuality } from './quality';
 import { Rider } from './Vehicles';
+import { game } from '../game/store';
 
 /*
  * Traffic: cars, cabs, autos, bikes and KSRTC buses driving Kasaragod's real roads around you, keeping left,
@@ -40,6 +41,8 @@ interface Driver {
   stops: number[];
   next: number;
   wait: number;
+  /** when this driver can next hit someone (ms, performance.now) */
+  hitAt?: number;
 }
 
 /** Bus stops beside this route (metres along it). */
@@ -160,6 +163,12 @@ function Vehicle({ seed }: { seed: number }) {
     const keep = here.cls === 0 ? 3.2 : here.cls >= 5 ? 0.8 : kind === 'bus' ? 1.7 : kind === 'car' ? 1.9 : 2.4;
     d.x = here.x + here.dz * keep;
     d.z = here.z - here.dx * keep;
+    // a moving vehicle right beside you is an accident (walking into the road, mostly)
+    const now = performance.now();
+    if (!world.riding && d.speed > 2.5 && (d.hitAt ?? 0) < now && Math.hypot(d.x - p.x, d.z - p.z) < 1.6) {
+      d.hitAt = now + 8000;
+      game.hit(d.kind);
+    }
     d.dx = here.dx;
     d.dz = here.dz;
     const want = Math.atan2(-here.dz, here.dx);

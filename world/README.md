@@ -57,3 +57,23 @@ These only change the view:
 
 Time, sun and moon follow Kasaragod (12.50° N, 74.99° E); live weather comes from Open-Meteo.
 Credits: see public/CREDITS.txt.
+
+## The town game
+
+Points, life and a bag, on top of the town.
+
+- **Pick** from the coconut palms, the mango trees, the hibiscus and jasmine shrubs and the marigold beds
+  (aim at them, or tap). Each has a few to pick; they grow back on their own, a little at a time.
+- **Sell** at the Fruit & Flower Mart 🧺 (on the footpath, left of the building). It also makes garlands
+  from your flowers.
+- **Buy** with points at the shops along the footpath: 💊 Medical Store (first-aid kits, tonics),
+  🥤 Juice & Snack Bar (drinks and ice cream, which give life back), ☂️ Umbrella & Sun Shop, and
+  🪖 Helmet & Gear. Gear is worn from then on.
+- **Life** (❤️, 100 at the start) goes down in accidents (a vehicle that runs into you), in the rain
+  without an umbrella and in the heat (33 °C and up) without a sun cap. It comes back slowly when you're
+  safe. At 0 you faint: you're taken home to the building and drop 10% of your points.
+- **B** opens your bag: what you carry, what you can use, what you wear.
+
+Everything is tuned in `src/game/catalog.ts` (`TUNE`, `ITEMS`, `SHOPS`, `SOURCES`). Points, life, the bag
+and gear are saved in this browser only (localStorage); nothing is shared between visitors. Harvest stock
+lives in the page and resets on reload. `?debug` exposes `esGame` (the game state) and `esPick(x, y)`.

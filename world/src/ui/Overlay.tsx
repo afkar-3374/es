@@ -3,13 +3,15 @@ import { ui, useUi } from '../world/interact';
 import { isTouch, typing } from '../player/input';
 import { music } from '../audio/music';
 import { standUp } from '../world/seats';
+import { game, useGameValue } from '../game/store';
 import { ride } from '../world/ride';
 
 /** Crosshair, hints, the info card, what you're holding, sitting and riding controls. */
 export function Overlay() {
   const { hover, card, book, seated, drink, carrying, toast, riding } = useUi();
   const [, redraw] = useState(0);
-  const busy = !!card || !!book;
+  const shopOpen = useGameValue((s) => s.shop !== null || s.bag);
+  const busy = !!card || !!book || shopOpen;
 
   // Close the card with Esc / Enter; free the mouse while it's open
   useEffect(() => {
@@ -25,7 +27,7 @@ export function Overlay() {
   // Keys: Q sip · R read the book you carry · E get off / stand up · H horn
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (ui.get().card || ui.get().book || typing(e)) return;
+      if (ui.get().card || ui.get().book || game.modalOpen() || typing(e)) return;
       if (e.code === 'KeyQ') ui.sip();
       if (e.code === 'KeyR' && ui.get().carrying) ui.readCarried();
       if (e.code === 'KeyE') {

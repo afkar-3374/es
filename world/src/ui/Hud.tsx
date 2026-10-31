@@ -16,6 +16,9 @@ import { getMeta, groundAt } from '../world/map';
 import { world } from '../world/state';
 import * as THREE from 'three';
 import { real, useReal } from '../world/real';
+import { GameBar } from '../game/GameUi';
+import { game } from '../game/store';
+import { sfx } from '../game/sfx';
 
 /** The name of the place you're in (the nearest town, village or suburb), as you go. */
 function usePlace() {
@@ -86,6 +89,11 @@ export function Hud({ c }: { c: Conditions }) {
   const v = useVoice();
   const inCab = useCab().status !== 'idle';
   const [menu, setMenu] = useState(false);
+  const [sound, setSoundState] = useState(sfx.enabled);
+  const setSound = (on: boolean) => {
+    sfx.setEnabled(on);
+    setSoundState(on);
+  };
   // the menu closes when you go back to the town
   useEffect(() => {
     if (!menu) return;
@@ -98,7 +106,7 @@ export function Hud({ c }: { c: Conditions }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (typing(e) || ui.get().card || ui.get().book) return;
+      if (typing(e) || ui.get().card || ui.get().book || game.modalOpen()) return;
       if (e.code === 'KeyV' && !ui.get().riding) chooseVehicle();
     };
     window.addEventListener('keydown', onKey);
@@ -118,6 +126,9 @@ export function Hud({ c }: { c: Conditions }) {
             {w.emoji} {w.temperature}° · {w.label}
           </span>
         </div>
+        <div className="hud-stats">
+          <GameBar />
+        </div>
         <div className={`pill people ${status}`} title={status === 'online' ? 'People in town right now' : 'Trying to reach the town…'}>
           {status === 'online' ? `👥 ${here} ${here === 1 ? 'person' : 'people'} in town` : status === 'offline' ? '⚠️ Offline: you’re on your own for now' : '⏳ Joining town…'}
         </div>
@@ -134,15 +145,21 @@ export function Hud({ c }: { c: Conditions }) {
           }
           onClick={() => voice.toggleMute()}
         >
-          {v.mic === 'on' ? '🎙️ Mute' : v.mic === 'muted' ? '🔇 Unmute' : v.mic === 'asking' ? '🎙️ …' : '🎙️ Turn on mic'}
+          {v.mic === 'on' ? '🎙️' : v.mic === 'muted' ? '🔇' : '🎙️'}
+          <span className="lbl">{v.mic === 'on' ? ' Mute' : v.mic === 'muted' ? ' Unmute' : v.mic === 'asking' ? ' …' : ' Turn on mic'}</span>
         </button>
+        {!card && !book && (
+          <button type="button" className="pill link bag-btn" onClick={() => game.toggleBag()} title="Your bag (B): what you picked, what you carry, what you wear">
+            🎒<span className="lbl"> Bag</span>
+          </button>
+        )}
         {!riding && !card && !book && !inCab && (
           <>
             <button type="button" className="pill link cab-pill" onClick={bookCab} title="Book a cab to anywhere in Kasaragod (C)">
-              🚕 Cab
+              🚕<span className="lbl"> Cab</span>
             </button>
             <button type="button" className="pill link" onClick={chooseVehicle} title="Call your own vehicle (V)">
-              🏍️ My vehicle
+              🏍️<span className="lbl"> My vehicle</span>
             </button>
           </>
         )}
@@ -188,6 +205,21 @@ export function Hud({ c }: { c: Conditions }) {
               <span>🎵 Music</span>
               <b>{on ? 'On' : 'Off'}</b>
             </button>
+            <button
+              type="button"
+              className="hud-menu-item"
+              onClick={() => {
+                game.toggleBoard();
+                setMenu(false);
+              }}
+            >
+              <span>🏆 Town board</span>
+              <b>Open</b>
+            </button>
+            <button type="button" className="hud-menu-item" aria-pressed={sound} onClick={() => setSound(!sound)}>
+              <span>🔔 Game sounds</span>
+              <b>{sound ? 'On' : 'Off'}</b>
+            </button>
             <button type="button" className="hud-menu-item" onClick={() => (document.fullscreenElement ? document.exitFullscreen() : goFullscreen())}>
               <span>⛶ Full screen</span>
               <b>{document.fullscreenElement ? 'On' : 'Off'}</b>
@@ -218,6 +250,7 @@ export function Hud({ c }: { c: Conditions }) {
                 <>
                   <li>🕹️ Left thumb walks · drag the right side to look</li>
                   <li>👆 Tap people and things to use them</li>
+                  <li>🍎 Tap trees and plants to pick · 🧺 sell at the Mart · 🎒 bag</li>
                   <li>🚗 Riding: drag to steer where you look · GO & BRAKE pedals</li>
                 </>
               ) : (
@@ -226,6 +259,7 @@ export function Hud({ c }: { c: Conditions }) {
                   <li>🖱️ Click things to use them · Esc frees the mouse</li>
                   <li>🚗 Riding: look to steer · W go · S brake · V view · H horn</li>
                   <li>🚕 C cab · V vehicle · M map · Enter chat</li>
+                  <li>🍎 Click trees and plants to pick · 🧺 sell · 🛒 shops · B bag</li>
                 </>
               )}
             </ul>

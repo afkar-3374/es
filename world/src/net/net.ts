@@ -76,6 +76,10 @@ export const hooks = {
   left: (_id: string) => {},
   /** a message addressed to us over the town channel (voice call setup) */
   direct: (_from: string, _data: Record<string, unknown>) => {},
+  /** the town game: someone's points, shown on the town board (live only, nothing stored) */
+  score: (_id: string, _name: string, _points: number) => {},
+  /** the town game: a trade offer or reply, sent to just one person */
+  trade: (_from: string, _data: Record<string, unknown>) => {},
 };
 
 type Status = 'off' | 'connecting' | 'online' | 'offline';
@@ -259,6 +263,14 @@ export const net = {
         const from = cleanId(payload?.f);
         if (from && from !== me.id && payload?.t === me.id && payload.d && typeof payload.d === 'object') hooks.direct(from, payload.d);
       })
+      .on('broadcast', { event: 'g' }, ({ payload }) => {
+        const id = cleanId(payload?.i);
+        if (id && id !== me.id) hooks.score(id, String(payload?.n ?? '').slice(0, 20), Math.max(0, Math.floor(Number(payload?.p) || 0)));
+      })
+      .on('broadcast', { event: 't' }, ({ payload }) => {
+        const from = cleanId(payload?.f);
+        if (from && from !== me.id && payload?.t === me.id && payload.d && typeof payload.d === 'object') hooks.trade(from, payload.d);
+      })
       .on('broadcast', { event: 'hi' }, () => {
         // someone new: tell them about us soon (spread out so we don't all answer at once)
         setTimeout(() => (last.at = 0), Math.random() * 600);
@@ -311,6 +323,23 @@ export const net = {
     channel?.send({ type: 'broadcast', event: 'd', payload: { f: me.id, t: to, d: data } });
     return true;
   },
+
+  /** Tell the town your points (for the town board). */
+  score(points: number) {
+    if (status !== 'online') return false;
+    channel?.send({ type: 'broadcast', event: 'g', payload: { i: me.id, n: me.name, p: Math.floor(points) } });
+    return true;
+  },
+
+  /** A trade message to one person. */
+  trade(to: string, data: Record<string, unknown>) {
+    if (status !== 'online') return false;
+    channel?.send({ type: 'broadcast', event: 't', payload: { f: me.id, t: to, d: data } });
+    return true;
+  },
+
+  /** Who we are on the town channel (for the trade and the board). */
+  me: () => ({ id: me.id, name: me.name }),
 
   stop() {
     window.clearInterval(timer);
