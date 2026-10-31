@@ -33,7 +33,12 @@ export function Interactor() {
   useFrame(() => {
     // desktop: show what's under the crosshair (a few times a second is enough)
     const riding = !!ui.get().riding;
-    if (!isTouch && ++frame.current % 6 === 0) ui.setHover(riding ? null : pick(centre)?.label ?? null);
+    // a ray through the whole town is not free: ten times a second is plenty for a hint
+    const now = performance.now();
+    if (!isTouch && now - frame.current > 100) {
+      frame.current = now;
+      ui.setHover(riding ? null : pick(centre)?.label ?? null);
+    }
     while (taps.length) {
       const t = taps.shift()!;
       if (riding) continue; // clicks steer nothing while you ride
