@@ -144,7 +144,8 @@ export default function App() {
       <Canvas
         shadows="percentage"
         dpr={Math.min(gfx.settings.dpr, window.devicePixelRatio || 1)}
-        gl={{ antialias: true, powerPreference: 'high-performance' }}
+        // phones: the pixel density already softens edges, and multisampling costs a lot per frame
+        gl={{ antialias: !isTouch, powerPreference: 'high-performance' }}
         camera={{ fov: 70, near: 0.1, far: 7000, position: [0, 1.85, 16.5] }}
         onCreated={({ gl }) => {
           if (DEBUG) Object.assign(window, { esGl: gl });

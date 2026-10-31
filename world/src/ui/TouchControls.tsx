@@ -106,7 +106,12 @@ function DriveControls({ kind }: { kind: VehicleKind }) {
 function WalkControls() {
   const stick = useRef<{ id: number; x: number; y: number } | null>(null);
   const look = useRef<{ id: number; x: number; y: number; sx: number; sy: number; t: number } | null>(null);
-  const [knob, setKnob] = useState({ x: 0, y: 0, active: false });
+  // the knob follows the finger straight on the element: no React render on every touch move
+  const knobEl = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(false);
+  const moveKnob = (x: number, y: number) => {
+    if (knobEl.current) knobEl.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+  };
   const RANGE = 48;
 
   const onStart = (e: React.TouchEvent) => {
@@ -114,7 +119,8 @@ function WalkControls() {
       const leftSide = t.clientX < window.innerWidth * 0.45;
       if (leftSide && !stick.current) {
         stick.current = { id: t.identifier, x: t.clientX, y: t.clientY };
-        setKnob({ x: 0, y: 0, active: true });
+        setActive(true);
+        moveKnob(0, 0);
       } else if (!look.current) {
         look.current = { id: t.identifier, x: t.clientX, y: t.clientY, sx: t.clientX, sy: t.clientY, t: performance.now() };
       }
@@ -132,7 +138,7 @@ function WalkControls() {
         }
         input.joystick.x = dx / RANGE;
         input.joystick.y = -dy / RANGE;
-        setKnob({ x: dx, y: dy, active: true });
+        moveKnob(dx, dy);
       } else if (look.current?.id === t.identifier) {
         input.lookYaw -= (t.clientX - look.current.x) * 0.0055;
         input.lookPitch -= (t.clientY - look.current.y) * 0.0045;
@@ -147,7 +153,8 @@ function WalkControls() {
         stick.current = null;
         input.joystick.x = 0;
         input.joystick.y = 0;
-        setKnob({ x: 0, y: 0, active: false });
+        setActive(false);
+        moveKnob(0, 0);
       }
       if (look.current?.id === t.identifier) {
         // a quick tap without dragging uses whatever is under the finger
@@ -162,8 +169,8 @@ function WalkControls() {
 
   return (
     <div className="touch" onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd} onTouchCancel={onEnd}>
-      <div className={`stick${knob.active ? ' on' : ''}`}>
-        <div className="knob" style={{ transform: `translate(${knob.x}px, ${knob.y}px)` }} />
+      <div className={`stick${active ? ' on' : ''}`}>
+        <div ref={knobEl} className="knob" />
       </div>
       <p className="look-hint">Drag to look · tap things</p>
     </div>

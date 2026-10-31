@@ -1341,6 +1341,9 @@ function glowTexture() {
   return t;
 }
 
+/** Grid cells per side of one block of the far land (see FarLand). */
+const FAR_BLOCK = 64;
+
 /**
  * Kasaragod beyond the tiles you're near: the whole district's hills as one coarse mesh,
  * painted with the map's overview (land, roads, rivers, the sea), a little below the
@@ -1367,19 +1370,39 @@ function FarLand() {
         pos.set([x, heights[k] - 8, z], k * 3);
         uv.set([(x - meta.overview.x0) / w, 1 - (z - meta.overview.z0) / h], k * 2);
       }
+    // one set of vertices, cut into blocks: a block that's behind you or past the fog isn't drawn
+    const whole = new THREE.BufferGeometry();
+    whole.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    whole.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     const index: number[] = [];
     for (let r = 0; r < nz - 1; r++)
       for (let q = 0; q < nx - 1; q++) {
         const a = r * nx + q;
         index.push(a, a + nx, a + 1, a + 1, a + nx, a + nx + 1);
       }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    g.setIndex(index);
-    g.computeVertexNormals();
-    g.computeBoundingSphere();
-    return g;
+    whole.setIndex(index);
+    whole.computeVertexNormals();
+    const normal = whole.attributes.normal;
+    const blocks: THREE.BufferGeometry[] = [];
+    for (let r0 = 0; r0 < nz - 1; r0 += FAR_BLOCK)
+      for (let q0 = 0; q0 < nx - 1; q0 += FAR_BLOCK) {
+        const r1 = Math.min(nz - 1, r0 + FAR_BLOCK);
+        const q1 = Math.min(nx - 1, q0 + FAR_BLOCK);
+        const part: number[] = [];
+        for (let r = r0; r < r1; r++)
+          for (let q = q0; q < q1; q++) {
+            const a = r * nx + q;
+            part.push(a, a + nx, a + 1, a + 1, a + nx, a + nx + 1);
+          }
+        const b = new THREE.BufferGeometry();
+        b.setAttribute('position', whole.attributes.position);
+        b.setAttribute('normal', normal);
+        b.setAttribute('uv', whole.attributes.uv);
+        b.setIndex(part);
+        b.computeBoundingSphere();
+        blocks.push(b);
+      }
+    return blocks;
   }, [far, meta]);
   const material = useMemo(() => {
     const tex = new THREE.TextureLoader().load(`${import.meta.env.BASE_URL}map/overview.png`);
@@ -1388,9 +1411,15 @@ function FarLand() {
     // greener than the map's paper colour, like the land up close
     return new THREE.MeshStandardMaterial({ map: tex, color: '#9fbf7a', roughness: 1, polygonOffset: true, polygonOffsetFactor: 8, polygonOffsetUnits: 16 });
   }, []);
-  useEffect(() => () => geometry?.dispose(), [geometry]);
+  useEffect(() => () => geometry?.forEach((g) => g.dispose()), [geometry]);
   if (!geometry) return null;
-  return <mesh geometry={geometry} material={material} receiveShadow raycast={noRaycast} />;
+  return (
+    <group>
+      {geometry.map((g, i) => (
+        <mesh key={i} geometry={g} material={material} receiveShadow raycast={noRaycast} />
+      ))}
+    </group>
+  );
 }
 
 /** Grass under everything, following the camera (in steps, so the texture stays put). */
@@ -1405,7 +1434,7 @@ function Ground({ mat }: { mat: THREE.MeshStandardMaterial }) {
   return (
     <mesh ref={mesh} rotation-x={-Math.PI / 2} material={mat} receiveShadow raycast={noRaycast}>
       {/* in 50 m squares: one huge pair of triangles loses depth precision near you and shows through the street */}
-      <planeGeometry args={[12000, 12000, 240, 240]} />
+      <planeGeometry args={[6000, 6000, 120, 120]} />
     </mesh>
   );
 }
