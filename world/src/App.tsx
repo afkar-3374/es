@@ -47,6 +47,9 @@ import { Player } from './player/Player';
 import { PALM_SPOTS } from './game/catalog';
 import { Harvest } from './game/Harvest';
 import { Shops } from './game/Shops';
+import { Bots } from './game/Bots';
+import './game/discover';
+import { BOTS, botClock, botPose } from './game/bots';
 import { GamePanels, HurtFlash } from './game/GameUi';
 import { game } from './game/store';
 import { offer } from './game/trade';
@@ -83,7 +86,7 @@ const OFF = new Set((new URLSearchParams(location.search).get('off') ?? '').spli
 
 const DEBUG = new URLSearchParams(location.search).has('debug');
 // For previews: ?debug exposes a way to press "use" from the console
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esUse: requestUse, esWorld: world, esSay: net.say, esRide: ride, esInput: input, esPeers: peers, esGround: groundAt, esGame: game, esOffer: offer, esNet: net });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esUse: requestUse, esWorld: world, esSay: net.say, esRide: ride, esInput: input, esPeers: peers, esGround: groundAt, esGame: game, esOffer: offer, esNet: net, esBotClock: botClock, esBotPose: (id: string) => { const b = BOTS.find((x) => x.id === id); return b ? botPose(b) : null; } });
 
 
 /** The building's insides are only drawn when you're close enough to see them. */
@@ -162,6 +165,7 @@ export default function App() {
           <Physics gravity={[0, -9.81, 0]}>
             <Street />
             <Shops />
+            <Bots />
             <Harvest palms={palms} />
             {!OFF.has('map') && <MapTiles />}
             {!OFF.has('map') && <Landmarks />}
