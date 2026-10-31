@@ -77,3 +77,11 @@ Points, life and a bag, on top of the town.
 Everything is tuned in `src/game/catalog.ts` (`TUNE`, `ITEMS`, `SHOPS`, `SOURCES`). Points, life, the bag
 and gear are saved in this browser only (localStorage); nothing is shared between visitors. Harvest stock
 lives in the page and resets on reload. `?debug` exposes `esGame` (the game state) and `esPick(x, y)`.
+
+## Explore, and the bots
+
+- **Explore:** walk into a named place (a town, village or suburb) to discover it: +10 points, and it's
+  marked 📍 on the map (M). The HUD counts how many you've found.
+- **Bots:** Ravi, Anu, Joseph and Fathima walk the north footpath. Their walk runs on the wall clock, so
+  everyone sees them in the same place. Say hi to one for a tip of 5 points, once a day per bot.
+- **Map (M):** the town at 1:4 (the 1:4 button) with the bots, the shops and the places you've found.

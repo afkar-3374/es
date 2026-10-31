@@ -4,6 +4,7 @@ import { ITEMS, MAX_LIFE, RECIPES, SHOPS, type Item } from './catalog';
 import { specialItem } from './festival';
 import { boardRows, useBoardVersion } from './board';
 import { offer } from './trade';
+import { useDiscovered } from './discover';
 import { useNet, net } from '../net/net';
 import { isTouch, typing } from '../player/input';
 import { ui } from '../world/interact';
@@ -12,9 +13,17 @@ import { ui } from '../world/interact';
 export function GameBar() {
   const points = useGameValue((s) => s.points);
   const life = useGameValue((s) => s.life);
+  const { names, total } = useDiscovered();
   const low = life < 35;
   return (
     <>
+      <div className="pill explored" title="Places you’ve discovered by walking into them: each one gives points">
+        <span aria-hidden="true">🧭</span>
+        <b>
+          {names.size}/{total}
+        </b>
+        <span>explored</span>
+      </div>
       <div className="pill wallet" title="Points: earn them by selling at the Fruit & Flower Mart, spend them in the shops">
         <span aria-hidden="true">🪙</span>
         <b>{points}</b>

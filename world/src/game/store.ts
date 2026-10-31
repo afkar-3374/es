@@ -230,6 +230,11 @@ export const game = {
     ui.toast(life >= MAX_LIFE ? 'Full life again!' : `+${item.heal} life. ${item.emoji}`);
   },
 
+  /** Points from somewhere else in town (discoveries, tips). */
+  addPoints(n: number) {
+    if (n > 0) commit({ points: state.points + n });
+  },
+
   /** A vehicle hit you. Helmet and vest help; the zebra crossing helps most. */
   hit(kind: string) {
     const now = performance.now();

@@ -5,6 +5,9 @@ import { getMeta, loadedTile, loadMeta, RAIL, waterRects, type Tile } from '../w
 import { segments } from '../world/Street';
 import { cab } from '../world/cab';
 import { me, peers } from '../net/net';
+import { BOTS, botPose } from '../game/bots';
+import { SHOPS } from '../game/catalog';
+import { discovered } from '../game/discover';
 import { typing } from '../player/input';
 
 /** A colour for each visitor, the same on everyone's map. */
@@ -135,6 +138,9 @@ export function Minimap() {
                 <i className="dot es" /> Electrosparkzz
               </span>
               <span className="map-zoom">
+                <button type="button" onClick={() => (view.current.scale = 0.25)} aria-label="Town at 1 to 4 scale" title="The town at 1:4">
+                  1:4
+                </button>
                 <button type="button" onClick={() => zoomBy(1.6)} aria-label="Zoom in">
                   +
                 </button>
@@ -383,6 +389,38 @@ function draw(canvas: HTMLCanvasElement, view: { cx: number; cz: number; scale: 
       g.fillStyle = '#2b2238';
       g.fillText(peer.name, X(x), y);
     }
+  }
+  // the town's bots (they walk the footpath), the shops, and the places you've found
+  for (const b of BOTS) {
+    const p = botPose(b);
+    g.beginPath();
+    g.arc(X(p.x), Z(p.z), dot - 1, 0, Math.PI * 2);
+    g.fillStyle = b.shirt;
+    g.fill();
+    g.lineWidth = 3;
+    g.strokeStyle = '#fff';
+    g.stroke();
+    if (full) {
+      const label = `${b.name} · bot`;
+      g.font = '700 17px Nunito, sans-serif';
+      g.textAlign = 'center';
+      const tw = g.measureText(label).width + 6;
+      let y = Z(p.z) - 14;
+      for (let k = 0; k < 6 && !free(X(p.x), y + 3, tw, 20); k++) y -= 20;
+      take(X(p.x), y + 3, tw, 20);
+      g.lineWidth = 4;
+      g.strokeStyle = 'rgba(255, 253, 248, 0.85)';
+      g.strokeText(label, X(p.x), y);
+      g.fillStyle = '#2b2238';
+      g.fillText(label, X(p.x), y);
+    }
+  }
+  g.textAlign = 'center';
+  g.font = `${full ? 24 : 18}px sans-serif`;
+  for (const s of SHOPS) g.fillText(s.emoji, X(s.x), Z(1.6) + 8);
+  if (full && meta) {
+    g.font = '22px sans-serif';
+    for (const pl of meta.places) if (discovered().has(pl.n)) g.fillText('📍', X(pl.x), Z(pl.z) + 8);
   }
   // your own vehicle, parked
   const v = world.vehicle;

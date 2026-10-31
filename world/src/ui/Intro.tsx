@@ -39,7 +39,21 @@ export function Intro({ c, onEnter }: { c: Conditions; onEnter: (p: Profile) => 
         }}
       >
         <div className="intro-head">
+          <div className="hero-art" aria-hidden="true">
+            <span className="hero-f f1">🌸</span>
+            <span className="hero-f f2">🥭</span>
+            <span className="hero-f f3">🌺</span>
+            <span className="hero-f f4">🥥</span>
+            <span className="hero-f f5">🌼</span>
+            <svg className="garland" viewBox="0 0 320 30" preserveAspectRatio="none">
+              <path d="M0 15 Q 80 0 160 15 T 320 15" />
+              {Array.from({ length: 12 }, (_, i) => (
+                <ellipse key={i} cx={14 + i * 26} cy={i % 2 ? 9 : 21} rx="9" ry="4" transform={`rotate(${i % 2 ? -30 : 30} ${14 + i * 26} ${i % 2 ? 9 : 21})`} />
+              ))}
+            </svg>
+          </div>
           <p className="eyebrow">Electrosparkzz Town · Kasaragod</p>
+          <p className="malayalam" lang="ml">കാസർഗോഡ് ടൗൺ · സ്വാഗതം</p>
           <h1>Come on in.</h1>
           <p className="lead">
             All of Kasaragod district in 3D — its real roads, 400,000 buildings, hills, forts and temples, buses and autos — shared with everyone here right now. The sky and weather follow Kasaragod live:{' '}
@@ -48,6 +62,13 @@ export function Intro({ c, onEnter }: { c: Conditions; onEnter: (p: Profile) => 
             </b>
             .
           </p>
+          <ul className="chips" aria-label="What you can do in town">
+            <li>🌸 Pick flowers &amp; fruit</li>
+            <li>🧺 Sell at the Mart</li>
+            <li>🛒 Shop for gear</li>
+            <li>🧭 Explore &amp; discover</li>
+            <li>🤖 Meet the bots</li>
+          </ul>
         </div>
         <div className="intro-form">
           <label className="name-field">
