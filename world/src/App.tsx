@@ -44,6 +44,12 @@ import { Interactor } from './world/Interactor';
 import { requestUse } from './world/interact';
 import { Palms, type PalmSpot } from './world/Palms';
 import { Player } from './player/Player';
+import { PALM_SPOTS } from './game/catalog';
+import { Harvest } from './game/Harvest';
+import { Shops } from './game/Shops';
+import { GamePanels, HurtFlash } from './game/GameUi';
+import { game } from './game/store';
+import { offer } from './game/trade';
 import { PosePreview } from './world/PosePreview';
 import { Hud } from './ui/Hud';
 import { Intro } from './ui/Intro';
@@ -77,13 +83,8 @@ const OFF = new Set((new URLSearchParams(location.search).get('off') ?? '').spli
 
 const DEBUG = new URLSearchParams(location.search).has('debug');
 // For previews: ?debug exposes a way to press "use" from the console
-if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esUse: requestUse, esWorld: world, esSay: net.say, esRide: ride, esInput: input, esPeers: peers, esGround: groundAt });
+if (new URLSearchParams(location.search).has('debug')) Object.assign(window, { esUse: requestUse, esWorld: world, esSay: net.say, esRide: ride, esInput: input, esPeers: peers, esGround: groundAt, esGame: game, esOffer: offer, esNet: net });
 
-// Coconut palms along both footpaths (not in front of the entrance)
-const PALMS: PalmSpot[] = [
-  ...[-54, -44, -27, 27, 44, 54].map((x) => ({ x, z: 3.6 })),
-  ...[-50, -31, -16, 13, 34, 50].map((x) => ({ x, z: 16.9 })), // (none right where people arrive: it hides the sign)
-];
 
 /** The building's insides are only drawn when you're close enough to see them. */
 function NearBuilding({ children }: { children: React.ReactNode }) {
@@ -106,7 +107,9 @@ export default function App() {
   const realView = useReal();
   // no palm in the middle of a side road
   const gaps = useMeta()?.gaps;
-  const palms = useMemo(() => PALMS.filter((p) => !inGap(gaps, p.z < 10 ? 'n' : 's', p.x - 1, p.x + 1)), [gaps]);
+  const palms: PalmSpot[] = useMemo(() => PALM_SPOTS.filter((p) => !inGap(gaps, p.z < 10 ? 'n' : 's', p.x - 1, p.x + 1)), [gaps]);
+  // the weather's heat matters to your life (see game/store.ts)
+  useEffect(() => game.setTemperature(c.weather.temperature), [c.weather.temperature]);
   // the sound of rain follows the weather (once you've entered, so audio is allowed)
   useEffect(() => {
     if (entered) music.setRain(c.weather.rain > 0.05 ? Math.min(0.3 + c.weather.rain / 4, 1) : 0);
@@ -158,6 +161,8 @@ export default function App() {
           <LampPool />
           <Physics gravity={[0, -9.81, 0]}>
             <Street />
+            <Shops />
+            <Harvest palms={palms} />
             {!OFF.has('map') && <MapTiles />}
             {!OFF.has('map') && <Landmarks />}
             {realView && <GoogleTiles />}
@@ -195,6 +200,8 @@ export default function App() {
       {entered && isTouch && !book && <TouchControls />}
       {entered && <Hud c={c} />}
       {entered && <Overlay />}
+      {entered && <GamePanels />}
+      {entered && <HurtFlash />}
       {entered && <Chat />}
       {entered && <Minimap />}
       {entered && <CabUi />}

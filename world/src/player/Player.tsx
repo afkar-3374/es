@@ -7,6 +7,7 @@ import { input } from './input';
 import { insideBuilding, world } from '../world/state';
 import { groundAt } from '../world/map';
 import { ui } from '../world/interact';
+import { game } from '../game/store';
 
 const HALF_HEIGHT = 0.55;
 const RADIUS = 0.3;
@@ -55,7 +56,7 @@ export function Player({ start = [0, 1.2, 16.5] as [number, number, number], sta
     if (!collider.current) collider.current = b.collider(0);
 
     // while a book is open, you stand still and the world waits
-    const busy = ui.get().book !== null || ui.get().card !== null;
+    const busy = ui.get().book !== null || ui.get().card !== null || game.modalOpen();
     if (busy) {
       input.lookYaw = 0;
       input.lookPitch = 0;
