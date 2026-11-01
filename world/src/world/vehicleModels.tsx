@@ -9,7 +9,7 @@ import { canvasTexture } from './materials';
  * side. Wheels are tagged `userData.wheel = radius` so they can be spun.
  */
 /** (bus: traffic only) */
-export type VehicleKind = 'car' | 'auto' | 'bike' | 'cycle' | 'bus';
+export type VehicleKind = 'car' | 'auto' | 'bike' | 'cycle' | 'bus' | 'heli';
 
 export const SPECS: Record<VehicleKind, {
   name: string;
@@ -30,6 +30,7 @@ export const SPECS: Record<VehicleKind, {
   bike: { name: 'Superbike', emoji: '🏍️', half: [1.02, 0.58, 0.36], eye: [-0.12, 1.38, 0], top: 62, accel: 8.5, turn: 1.35, seat: 0.84 },
   bus: { name: 'Bus', emoji: '🚌', half: [5.45, 1.55, 1.25], eye: [4.6, 2.4, 0.7], top: 14, accel: 1.4, turn: 0.4, seat: 1.4 },
   cycle: { name: 'Bicycle', emoji: '🚲', half: [0.88, 0.55, 0.3], eye: [-0.25, 1.6, 0], top: 6, accel: 1.4, turn: 1.6, seat: 0.95 },
+  heli: { name: 'Helicopter', emoji: '🚁', half: [2.1, 1.1, 1.05], eye: [0.9, 1.7, 0], top: 36, accel: 7, turn: 1.1, seat: 0.5 },
 };
 
 function plateTexture(text: string, commercial: boolean) {
@@ -538,13 +539,66 @@ export const Cycle = forwardRef<THREE.Group, { color: string }>(function Cycle({
   );
 });
 
+/** A small helicopter. Its rotors are kept apart from the merged body so they can spin (see Vehicles.tsx). */
+export function Heli({ color }: { color: string }) {
+  const paint = useMemo(() => new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.12 }), [color]);
+  const dark = useMemo(() => new THREE.MeshStandardMaterial({ color: '#23262b', roughness: 0.6, metalness: 0.2 }), []);
+  return (
+    <group>
+      <mesh position={[0, 1.12, 0]} scale={[1.5, 1, 1]} material={paint} castShadow>
+        <sphereGeometry args={[0.92, 24, 16]} />
+      </mesh>
+      <mesh position={[1.0, 1.2, 0]} scale={[0.85, 0.85, 0.92]} material={mats.tint} castShadow>
+        <sphereGeometry args={[0.82, 20, 14]} />
+      </mesh>
+      <mesh position={[-2.25, 1.22, 0]} rotation-z={Math.PI / 2} material={paint} castShadow>
+        <cylinderGeometry args={[0.2, 0.09, 2.6, 12]} />
+      </mesh>
+      <mesh position={[-3.45, 1.62, 0]} material={paint} castShadow>
+        <boxGeometry args={[0.55, 0.85, 0.07]} />
+      </mesh>
+      {[-0.52, 0.52].map((z) => (
+        <group key={z}>
+          <mesh position={[0, 0.12, z]} material={dark} castShadow>
+            <boxGeometry args={[2.5, 0.07, 0.07]} />
+          </mesh>
+          {[-0.75, 0.6].map((x) => (
+            <mesh key={x} position={[x, 0.55, z]} material={dark}>
+              <boxGeometry args={[0.06, 0.82, 0.06]} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      <group position={[0, 2.15, 0]} userData={{ rotor: 'main', keep: true }}>
+        <mesh material={dark} castShadow>
+          <cylinderGeometry args={[0.13, 0.13, 0.26, 10]} />
+        </mesh>
+        <mesh material={dark} castShadow>
+          <boxGeometry args={[7.6, 0.035, 0.2]} />
+        </mesh>
+        <mesh material={dark} rotation-y={Math.PI / 2} castShadow>
+          <boxGeometry args={[7.6, 0.035, 0.2]} />
+        </mesh>
+      </group>
+      <group position={[-3.5, 1.62, 0.16]} userData={{ rotor: 'tail', keep: true }}>
+        <mesh material={dark}>
+          <boxGeometry args={[0.04, 0.9, 0.08]} />
+        </mesh>
+        <mesh material={dark}>
+          <boxGeometry args={[0.9, 0.04, 0.08]} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
 export function VehicleModel({ kind, color }: { kind: VehicleKind; color: string }) {
   const ref = useRef<THREE.Group>(null);
   // dozens of little parts become a handful of draw calls
   useLayoutEffect(() => (ref.current ? mergeStatic(ref.current) : undefined), [kind, color]);
   return (
     <group ref={ref}>
-      {kind === 'car' ? <Car color={color} /> : kind === 'bus' ? <Bus /> : kind === 'auto' ? <Auto /> : kind === 'bike' ? <Superbike color={color} /> : <Cycle color={color} />}
+      {kind === 'car' ? <Car color={color} /> : kind === 'bus' ? <Bus /> : kind === 'auto' ? <Auto /> : kind === 'bike' ? <Superbike color={color} /> : kind === 'heli' ? <Heli color={color} /> : <Cycle color={color} />}
     </group>
   );
 }

@@ -12,7 +12,8 @@ import type { VehicleKind } from '../world/vehicleModels';
 
 // (new looks go on the end: everyone in town refers to a look by its place in this list)
 export const LOOKS = ['rider', 'barista', 'receptionist', 'kurta', 'hoodie', 'jacket', 'salwar', 'dress'] as const;
-export const KINDS: VehicleKind[] = ['bike', 'car', 'auto', 'cycle'];
+// append only: other visitors' browsers match these by position in the list
+export const KINDS: VehicleKind[] = ['bike', 'car', 'auto', 'cycle', 'heli'];
 
 /** 0 walking, 1 sitting, 2 riding */
 export type Mode = 0 | 1 | 2;

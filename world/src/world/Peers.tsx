@@ -153,7 +153,7 @@ function PeerPerson({ id, look, name }: { id: string; look: number; name: string
       headY = s.y + (p.mode === 1 ? 1.4 : 1.85);
     }
     // a car hides its driver well enough; skip the person inside
-    model.visible = !(riding && p.vehicle!.kind === 'car');
+    model.visible = !(riding && (p.vehicle!.kind === 'car' || p.vehicle!.kind === 'heli'));
 
     const dist = Math.hypot(g.position.x - world.player.x, g.position.z - world.player.z);
     g.visible = dist < SHOW_PERSON;

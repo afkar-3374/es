@@ -373,3 +373,64 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 13px; font-w
 
 .explored { color: #3c3249; }
 .map-zoom button[aria-label="Town at 1 to 4 scale"] { width: auto; padding: 0 10px; font-size: 13px; }
+
+/* ---- Responsive pass: phones in portrait, short screens, tablets ---- */
+/* Phones upright: the welcome card fits the screen without scrolling where it can */
+@media (max-width: 600px) and (orientation: portrait) {
+  .intro { padding: max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom)); }
+  .card { width: 100%; padding: 16px 16px 14px; border-radius: 22px; }
+  .hero-art { height: 44px; margin: -2px 0 8px; }
+  .hero-f { font-size: 20px; }
+  .hero-f.f5 { font-size: 16px; }
+  .garland { width: 240px; }
+  .card h1 { font-size: 32px; margin: 2px 0 6px; }
+  .eyebrow { font-size: 12px; }
+  .malayalam { font-size: 14px; }
+  .lead { font-size: 14px; line-height: 1.5; }
+  .chips { gap: 6px; margin: 10px 0 0; }
+  .chips li { font-size: 12px; padding: 4px 9px; }
+  .name-field { margin-bottom: 8px; }
+  .name-field input, .name-field select { font-size: 16px; } /* 16px stops iOS zooming in on focus */
+  .looks { gap: 6px; margin-bottom: 8px; }
+  .looks button { padding: 8px 4px; font-size: 13px; min-height: 44px; }
+  .keys { font-size: 12px; }
+  .enter { min-height: 48px; font-size: 16px; }
+}
+
+/* Short screens (phones upright with the address bar, small laptops): keep the card in view */
+@media (max-height: 700px) and (min-width: 601px) {
+  .card h1 { font-size: 34px; }
+  .hero-art { height: 46px; }
+  .keys { display: none; }
+}
+
+/* Tablets and large screens: a comfortable reading width */
+@media (min-width: 900px) {
+  .card { width: min(480px, 100%); }
+}
+
+/* Touch targets: at least 44px tall for the buttons people press with a thumb */
+@media (pointer: coarse) {
+  .chat-open, .hud button, .looks button { min-height: 40px; }
+}
+
+/* Respect the notch and home-bar on every phone */
+@supports (height: 100dvh) {
+  .intro { min-height: 100dvh; }
+}
+
+/* Any short landscape screen (phones sideways, small windows): two columns, everything in view */
+@media (max-height: 520px) and (orientation: landscape) {
+  .card { width: min(780px, 100%); display: grid; grid-template-columns: 1fr 1.15fr; align-items: center; gap: 16px; padding: 14px 18px; border-radius: 22px; text-align: left; }
+  .card .intro-head { min-width: 0; }
+  .hero-art { height: 36px; margin: -4px 0 10px; }
+  .card h1 { font-size: 28px; margin: 2px 0 6px; }
+  .lead { font-size: 13px; line-height: 1.45; margin: 0; }
+  .chips { justify-content: flex-start; margin-top: 8px; }
+  .chips li { font-size: 11px; padding: 3px 8px; }
+  .looks { margin-bottom: 6px; }
+  .looks button { padding: 6px 4px; font-size: 12px; min-height: 36px; }
+  .keys { display: none; }
+  .enter { min-height: 42px; padding: 10px 18px; font-size: 15px; }
+  .classic { display: block; margin-top: 6px; text-align: center; font-size: 12px; }
+}
